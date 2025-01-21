@@ -37,7 +37,7 @@ func Run(ctx context.Context, domain api.Domain, local *api.Node, nodes iter.Seq
 			for i := range node.Services {
 				service := &node.Services[i]
 				ctx := log.With(ctx, "service", service.Name)
-				if err := target.Service(ctx, domain.Node, local, node, service); isError(&errs, err, "update service %s on %s in %s", service.ID, node.Name, name) {
+				if err := target.Service(ctx, domain.Service, local, node, service); isError(&errs, err, "update service %s on %s in %s", service.ID, node.Name, name) {
 					delete(targets, name)
 					continue targetLoop
 				}
@@ -46,6 +46,7 @@ func Run(ctx context.Context, domain api.Domain, local *api.Node, nodes iter.Seq
 	}
 
 	for name, target := range targets {
+		ctx := log.With(ctx, "target", name)
 		if err := target.Commit(ctx, domain); isError(&errs, err, "commit %s", name) {
 			continue
 		}

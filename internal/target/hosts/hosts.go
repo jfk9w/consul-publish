@@ -31,24 +31,27 @@ func New(cfg Config) Target {
 	}
 }
 
-func (t Target) add(address string, name string) {
+func (t Target) add(ctx context.Context, address string, values ...string) {
 	names := t.names[address]
 	if names == nil {
 		names = make(map[string]bool)
 		t.names[address] = names
 	}
 
-	names[name] = true
+	ctx = log.With(ctx, "address", address)
+	for _, value := range values {
+		names[value] = true
+		log.Debug(log.With(ctx, "name", value), "updated host")
+	}
 }
 
 func (t Target) Node(ctx context.Context, domain string, local *api.Node, node *api.Node) error {
 	if local.ID != node.ID {
-		t.add(node.Address, node.Name)
+		t.add(ctx, node.Address, node.Name)
 		return nil
 	}
 
-	t.add(api.Localhost, node.Name)
-	t.add(api.Localhost, api.Subdomain(node.Name, domain))
+	t.add(ctx, api.Localhost, node.Name, api.Subdomain(node.Name, domain))
 
 	return nil
 }
@@ -75,9 +78,7 @@ func (t Target) Service(ctx context.Context, domain string, local, node *api.Nod
 		return nil
 	}
 
-	ctx = log.With(ctx, "address", address)
-	t.add(address, api.Subdomain(service.Domain, domain))
-	log.Info(ctx, "updated service")
+	t.add(ctx, address, api.Subdomain(service.Domain, domain))
 
 	return nil
 }
@@ -108,7 +109,7 @@ func (t Target) Commit(ctx context.Context, domain api.Domain) error {
 	}
 
 	log.Info(log.With(ctx, "entries", len(t.names)), "written temp file")
-	ctx = log.With(ctx, "target", t.path)
+	ctx = log.With(ctx, "path", t.path)
 
 	source, err := os.Stat(file.Name())
 	if err != nil {
