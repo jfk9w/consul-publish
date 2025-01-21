@@ -98,15 +98,13 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 			Content: ping.YourIP,
 		}
 
-		log.Info(ctx, "adding record", "subdomain", subdomain)
-		if t.dry {
-			continue
+		if !t.dry {
+			if _, err := t.client.UpdateRecord(ctx, in); err != nil {
+				return errors.Wrapf(err, "create record for %s", subdomain)
+			}
 		}
 
-		_, err := t.client.UpdateRecord(ctx, in)
-		if err != nil {
-			return errors.Wrapf(err, "create record for %s", subdomain)
-		}
+		log.Info(ctx, "added record", "subdomain", subdomain)
 	}
 
 	for subdomain, id := range subdomains {
@@ -120,14 +118,13 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 			ID:     id,
 		}
 
-		log.Info(ctx, "removing record", "subdomain", subdomain)
-		if t.dry {
-			continue
+		if !t.dry {
+			if _, err := t.client.DeleteRecord(ctx, in); err != nil {
+				return errors.Wrapf(err, "delete record for %s", subdomain)
+			}
 		}
 
-		if _, err := t.client.DeleteRecord(ctx, in); err != nil {
-			return errors.Wrapf(err, "delete record for %s", subdomain)
-		}
+		log.Info(ctx, "removed record", "subdomain", subdomain)
 	}
 
 	return nil

@@ -39,6 +39,8 @@ func Watch(ctx context.Context, consul api.Consul, interval time.Duration) iter.
 				return
 			}
 
+			log.Info(ctx, "sync completed, waiting for changes")
+
 			select {
 			case <-time.After(interval):
 			case <-ctx.Done():
