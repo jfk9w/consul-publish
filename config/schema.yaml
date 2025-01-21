@@ -79,5 +79,6 @@ properties:
     description: Consul token
     type: string
 required:
+  - token
   - domain
 type: object

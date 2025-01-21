@@ -26,7 +26,7 @@ type Config struct {
 	} `yaml:"dump,omitempty" doc:"Dump info in stdout."`
 
 	Address string `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
-	Token   string `yaml:"token,omitempty" doc:"Consul token"`
+	Token   string `yaml:"token" doc:"Consul token"`
 
 	Once     bool          `yaml:"once,omitempty" doc:"Execute once and exit"`
 	Interval time.Duration `yaml:"interval,omitempty" doc:"Consul watch interval" default:"1m"`

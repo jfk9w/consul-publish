@@ -5,3 +5,4 @@ domain:
 hosts:
   file: /etc/hosts
 interval: 1m0s
+token: ""
