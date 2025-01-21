@@ -1,4 +1,4 @@
-package internal
+package publish
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/jfk9w/consul-resource-sync/internal/api"
-	"github.com/jfk9w/consul-resource-sync/internal/log"
+	"github.com/jfk9w/consul-publish/internal/api"
+	"github.com/jfk9w/consul-publish/internal/log"
 )
 
 func Watch(ctx context.Context, consul api.Consul, interval time.Duration) iter.Seq2[iter.Seq[*api.Node], error] {
@@ -35,15 +35,13 @@ func Watch(ctx context.Context, consul api.Consul, interval time.Duration) iter.
 				prev = nodes
 			}
 
-			if interval == 0 {
-				yield(nil, nil)
+			if interval <= 0 {
 				return
 			}
 
 			select {
 			case <-time.After(interval):
 			case <-ctx.Done():
-				yield(nil, ctx.Err())
 				return
 			}
 		}

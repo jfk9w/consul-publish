@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/jfk9w/consul-resource-sync/internal/api"
-	"github.com/jfk9w/consul-resource-sync/internal/target/hosts"
-	"github.com/jfk9w/consul-resource-sync/internal/target/porkbun"
+	"github.com/jfk9w/consul-publish/internal/api"
+	"github.com/jfk9w/consul-publish/internal/target/hosts"
+	"github.com/jfk9w/consul-publish/internal/target/porkbun"
 )
 
 type Registry map[string]Factory

@@ -2,37 +2,32 @@ package porkbun
 
 import (
 	"context"
-	"strings"
 
-	"github.com/jfk9w/consul-resource-sync/internal/api"
-	"github.com/jfk9w/consul-resource-sync/internal/log"
+	"github.com/jfk9w/consul-publish/internal/api"
+	"github.com/jfk9w/consul-publish/internal/log"
+	"github.com/jfk9w/consul-publish/internal/porkbun"
 
 	"github.com/pkg/errors"
 )
 
 const RecordType = "A"
 
-type Credentials struct {
-	Key    string `json:"apikey"`
-	Secret string `json:"secretapikey"`
-}
-
 type Config struct {
-	Credentials Credentials `yaml:"-"`
-	Dry         bool        `yaml:"dry,omitempty"`
+	Credentials porkbun.Credentials `yaml:"-"`
+	Dry         bool                `yaml:"dry,omitempty"`
 }
 
 type Target struct {
-	client *Client
-	dry    bool
-	names  map[string]bool
+	client     *porkbun.Client
+	dry        bool
+	subdomains map[string]bool
 }
 
 func New(cfg Config) *Target {
 	return &Target{
-		client: NewClient(cfg.Credentials),
-		dry:    cfg.Dry,
-		names:  make(map[string]bool),
+		client:     porkbun.NewClient(cfg.Credentials),
+		dry:        cfg.Dry,
+		subdomains: make(map[string]bool),
 	}
 }
 
@@ -41,8 +36,8 @@ func (t *Target) Node(ctx context.Context, domain string, local, node *api.Node)
 		return nil
 	}
 
-	subdomain := node.Name + "." + domain
-	t.names[subdomain] = true
+	subdomain := api.Subdomain(node.Name, domain)
+	t.subdomains[subdomain] = true
 
 	return nil
 }
@@ -56,11 +51,13 @@ func (t *Target) Service(ctx context.Context, domain string, local, node *api.No
 		return nil
 	}
 
-	t.names[service.Domain] = true
+	subdomain := api.Subdomain(service.Domain, domain)
+	t.subdomains[subdomain] = true
+
 	return nil
 }
 
-func (t *Target) Sync(ctx context.Context, domain api.Domain) error {
+func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 	ping, err := t.client.Ping(ctx)
 	if err != nil {
 		return errors.Wrap(err, "ping")
@@ -68,9 +65,9 @@ func (t *Target) Sync(ctx context.Context, domain api.Domain) error {
 
 	ctx = log.With(ctx, "address", ping.YourIP)
 
-	records := make(map[string]int64)
+	subdomains := make(map[string]int64)
 	for _, domain := range []string{domain.Node, domain.Service} {
-		in := RetrieveRecordsIn{
+		in := porkbun.RetrieveRecordsIn{
 			Domain: domain,
 			Type:   RecordType,
 		}
@@ -82,68 +79,56 @@ func (t *Target) Sync(ctx context.Context, domain api.Domain) error {
 
 		for _, record := range resp.Records {
 			if record.Content == ping.YourIP {
-				records[join(record.Name, domain)] = record.ID
+				subdomain := api.Subdomain(record.Name, domain)
+				subdomains[subdomain] = record.ID
 			}
 		}
 	}
 
-	for subdomain := range t.names {
-		if _, ok := records[subdomain]; ok {
+	for subdomain := range t.subdomains {
+		if _, ok := subdomains[subdomain]; ok {
 			continue
 		}
 
-		name, domain := split(subdomain)
-		in := UpdateRecordIn{
+		name, domain := api.NameDomain(subdomain)
+		in := porkbun.UpdateRecordIn{
 			Domain:  domain,
 			Name:    name,
 			Type:    RecordType,
 			Content: ping.YourIP,
 		}
 
+		log.Info(ctx, "adding record", "subdomain", subdomain)
 		if t.dry {
-			log.Info(ctx, "adding record", "domain", subdomain)
 			continue
 		}
 
 		_, err := t.client.UpdateRecord(ctx, in)
 		if err != nil {
-			return errors.Wrapf(err, "create record for %s", join(name, domain))
+			return errors.Wrapf(err, "create record for %s", subdomain)
 		}
 	}
 
-	for record, id := range records {
-		if _, ok := t.names[record]; ok {
+	for subdomain, id := range subdomains {
+		if _, ok := t.subdomains[subdomain]; ok {
 			continue
 		}
 
-		_, domain := split(record)
-		in := DeleteRecordIn{
+		_, domain := api.NameDomain(subdomain)
+		in := porkbun.DeleteRecordIn{
 			Domain: domain,
 			ID:     id,
 		}
 
+		log.Info(ctx, "removing record", "subdomain", subdomain)
 		if t.dry {
-			log.Info(ctx, "removing record", "domain", record)
 			continue
 		}
 
 		if _, err := t.client.DeleteRecord(ctx, in); err != nil {
-			return errors.Wrapf(err, "delete record for %s", record)
+			return errors.Wrapf(err, "delete record for %s", subdomain)
 		}
 	}
 
 	return nil
-}
-
-func join(sub, domain string) string {
-	return sub + "." + domain
-}
-
-func split(subdomain string) (string, string) {
-	dot := strings.IndexRune(subdomain, '.')
-	if dot > 0 {
-		return subdomain[:dot], subdomain[dot+1:]
-	}
-
-	return "", subdomain
 }

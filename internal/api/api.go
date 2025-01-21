@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strings"
 
 	capi "github.com/hashicorp/consul/api"
 )
@@ -63,5 +64,18 @@ func NewService(service *capi.AgentService) *Service {
 type Target interface {
 	Node(ctx context.Context, domain string, local, node *Node) error
 	Service(ctx context.Context, domain string, local, node *Node, service *Service) error
-	Sync(ctx context.Context, domain Domain) error
+	Commit(ctx context.Context, domain Domain) error
+}
+
+func Subdomain(name, domain string) string {
+	return name + "." + domain
+}
+
+func NameDomain(subdomain string) (name, domain string) {
+	dot := strings.IndexRune(subdomain, '.')
+	if dot > 0 {
+		return subdomain[:dot], subdomain[dot+1:]
+	}
+
+	return "", subdomain
 }

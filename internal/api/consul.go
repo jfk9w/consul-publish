@@ -57,14 +57,14 @@ func (c *consul) Nodes(ctx context.Context) iter.Seq2[*Node, error] {
 		}
 
 		for _, node := range nodes {
-			cnode, _, err := c.client.Catalog().Node(node.Node, new(capi.QueryOptions).WithContext(ctx))
+			catalogNode, _, err := c.client.Catalog().Node(node.Node, new(capi.QueryOptions).WithContext(ctx))
 			if err != nil {
 				yield(nil, errors.Wrap(err, "get consul catalog node"))
 				return
 			}
 
 			node := NewNode(node)
-			for _, service := range cnode.Services {
+			for _, service := range catalogNode.Services {
 				node.Services = append(node.Services, *NewService(service))
 			}
 

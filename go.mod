@@ -1,4 +1,4 @@
-module github.com/jfk9w/consul-resource-sync
+module github.com/jfk9w/consul-publish
 
 go 1.23.4
 
@@ -23,6 +23,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	go.uber.org/multierr v1.11.0
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
 	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.19.0 // indirect
