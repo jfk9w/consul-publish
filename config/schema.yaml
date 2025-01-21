@@ -1,0 +1,83 @@
+additionalProperties: false
+properties:
+  address:
+    default: 127.0.0.1:8500
+    description: Consul address
+    type: string
+  domain:
+    additionalProperties: false
+    description: Domain settings
+    properties:
+      node:
+        description: Node domain
+        type: string
+      service:
+        description: Service domain
+        type: string
+    required:
+      - node
+      - service
+    type: object
+  dump:
+    additionalProperties: false
+    description: Dump info in stdout.
+    properties:
+      schema:
+        description: Dump configuration schema in YAML.
+        type: boolean
+      values:
+        description: Dump configuration values in YAML.
+        type: boolean
+    type: object
+  hosts:
+    additionalProperties: false
+    description: Hosts target settings
+    properties:
+      enabled:
+        description: Enable hosts target
+        type: boolean
+      file:
+        default: /etc/hosts
+        description: Hosts file path
+        type: string
+    required:
+      - file
+    type: object
+  interval:
+    default: 1m0s
+    description: Consul watch interval
+    pattern: (\d+h)?(\d+m)?(\d+s)?(\d+ms)?(\d+µs)?(\d+ns)?
+    type: string
+  once:
+    description: Execute once and exit
+    type: boolean
+  porkbun:
+    additionalProperties: false
+    description: Porkbun target settings
+    properties:
+      credentials:
+        additionalProperties: false
+        properties:
+          key:
+            type: string
+          secret:
+            type: string
+        required:
+          - key
+          - secret
+        type: object
+      credentialsKey:
+        description: Consul key for Porkbun credentials
+        type: string
+      dry:
+        type: boolean
+      enabled:
+        description: Enable Porkbun target
+        type: boolean
+    type: object
+  token:
+    description: Consul token
+    type: string
+required:
+  - domain
+type: object

@@ -6,19 +6,25 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/AlekSi/pointer"
+	"github.com/jfk9w-go/confi"
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
+
 	"github.com/jfk9w/consul-publish/internal/api"
 	"github.com/jfk9w/consul-publish/internal/log"
 	"github.com/jfk9w/consul-publish/internal/publish"
 	"github.com/jfk9w/consul-publish/internal/target"
 	"github.com/jfk9w/consul-publish/internal/target/hosts"
 	"github.com/jfk9w/consul-publish/internal/target/porkbun"
-	"go.uber.org/multierr"
-
-	"github.com/jfk9w-go/confi"
-	"github.com/pkg/errors"
 )
 
 type Config struct {
+	Dump *struct {
+		Schema bool `yaml:"schema,omitempty" doc:"Dump configuration schema in YAML."`
+		Values bool `yaml:"values,omitempty" doc:"Dump configuration values in YAML."`
+	} `yaml:"dump,omitempty" doc:"Dump info in stdout."`
+
 	Address string `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
 	Token   string `yaml:"token,omitempty" doc:"Consul token"`
 
@@ -29,22 +35,39 @@ type Config struct {
 	Hosts struct {
 		Enabled      bool `yaml:"enabled,omitempty" doc:"Enable hosts target"`
 		hosts.Config `yaml:",inline"`
-	} `yaml:"hosts" doc:"Hosts target settings"`
+	} `yaml:"hosts,omitempty" doc:"Hosts target settings"`
 
 	Porkbun struct {
 		Enabled        bool   `yaml:"enabled,omitempty" doc:"Enable Porkbun target"`
-		CredentialsKey string `yaml:"credentialsKey" doc:"Consul key for Porkbun credentials"`
+		CredentialsKey string `yaml:"credentialsKey,omitempty" doc:"Consul key for Porkbun credentials"`
 		porkbun.Config `yaml:",inline"`
-	} `yaml:"porkbun" doc:"Porkbun target settings"`
+	} `yaml:"porkbun,omitempty" doc:"Porkbun target settings"`
 }
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background())
 	defer cancel()
 
+	cfg, schema, err := confi.Get[Config](ctx, "consul-publish")
+	if err != nil {
+		log.Error(ctx, "read config", err)
+		os.Exit(1)
+	}
+
+	if pointer.Get(cfg.Dump).Schema {
+		dump(schema, confi.YAML)
+		return
+	}
+
+	if pointer.Get(cfg.Dump).Values {
+		cfg.Dump = nil
+		dump(cfg, confi.YAML)
+		return
+	}
+
 	defer log.Info(ctx, "shutdown")
 
-	if err := run(ctx); err != nil {
+	if err := run(ctx, cfg); err != nil {
 		for _, err := range multierr.Errors(err) {
 			log.Error(ctx, err.Error())
 		}
@@ -53,12 +76,7 @@ func main() {
 	}
 }
 
-func run(ctx context.Context) error {
-	cfg, _, err := confi.Get[Config](ctx, "consul-publish")
-	if err != nil {
-		return errors.Wrap(err, "read config")
-	}
-
+func run(ctx context.Context, cfg *Config) error {
 	consul, err := api.NewConsul(cfg.Address, cfg.Token)
 	if err != nil {
 		return errors.Wrap(err, "create consul client")
@@ -90,4 +108,10 @@ func run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func dump(value any, codec confi.Codec) {
+	if err := codec.Marshal(value, os.Stdout); err != nil {
+		panic(err)
+	}
 }

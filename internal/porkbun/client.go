@@ -11,8 +11,8 @@ import (
 )
 
 type Credentials struct {
-	Key    string `json:"apikey"`
-	Secret string `json:"secretapikey"`
+	Key    string `json:"apikey" yaml:"key"`
+	Secret string `json:"secretapikey" yaml:"secret"`
 }
 
 type Client struct {

@@ -13,7 +13,7 @@ import (
 const RecordType = "A"
 
 type Config struct {
-	Credentials porkbun.Credentials `yaml:"-"`
+	Credentials porkbun.Credentials `yaml:"credentials,omitempty"`
 	Dry         bool                `yaml:"dry,omitempty"`
 }
 
