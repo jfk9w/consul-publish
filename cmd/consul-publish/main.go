@@ -47,6 +47,13 @@ type Config struct {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error(context.Background(), "panic", "desc", r)
+			os.Exit(1)
+		}
+	}()
+
 	ctx, cancel := signal.NotifyContext(context.Background())
 	defer cancel()
 
