@@ -4,6 +4,8 @@ go 1.23.4
 
 require github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 
+require github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
+
 require (
 	github.com/AlekSi/pointer v1.2.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect

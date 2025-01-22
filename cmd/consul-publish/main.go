@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/AlekSi/pointer"
+	"github.com/coreos/go-systemd/daemon"
 	"github.com/jfk9w-go/confi"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -47,6 +49,11 @@ type Config struct {
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background())
 	defer cancel()
+
+	go func() {
+		<-ctx.Done()
+		notify(daemon.SdNotifyStopping)
+	}()
 
 	cfg, schema, err := confi.Get[Config](ctx, "consul-publish")
 	if err != nil {
@@ -105,6 +112,8 @@ func run(ctx context.Context, cfg *Config) error {
 		if err := publish.Run(ctx, cfg.Domain, local, nodes, targets); err != nil {
 			return err
 		}
+
+		ready()
 	}
 
 	return nil
@@ -113,5 +122,13 @@ func run(ctx context.Context, cfg *Config) error {
 func dump(value any, codec confi.Codec) {
 	if err := codec.Marshal(value, os.Stdout); err != nil {
 		panic(err)
+	}
+}
+
+var ready = sync.OnceFunc(func() { notify(daemon.SdNotifyReady) })
+
+func notify(state string) {
+	if _, err := daemon.SdNotify(false, state); err != nil {
+		log.Warn(context.Background(), "failed to notify systemd", err)
 	}
 }
