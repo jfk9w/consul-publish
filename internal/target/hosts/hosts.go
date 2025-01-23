@@ -2,9 +2,9 @@ package hosts
 
 import (
 	"context"
-	"io"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -84,7 +84,7 @@ func (t Target) Service(ctx context.Context, domain string, local, node *api.Nod
 }
 
 func (t Target) Commit(ctx context.Context, domain api.Domain) error {
-	file, err := os.CreateTemp("", "hosts")
+	file, err := os.CreateTemp(filepath.Dir(t.path), ".consul-publish-hosts-")
 	if err != nil {
 		return errors.Wrap(err, "create temp file")
 	}
@@ -130,34 +130,9 @@ func (t Target) Commit(ctx context.Context, domain api.Domain) error {
 	}
 
 	if err := os.Rename(file.Name(), t.path); err != nil {
-		log.Warn(ctx, "failed to rename temp file, trying to copy", "error", err)
-		if err := copyFile(file.Name(), t.path); err != nil {
-			return errors.Wrap(err, "copy temp file")
-		}
+		return errors.Wrap(err, "rename temp file")
 	}
 
 	log.Info(ctx, "updated hosts")
-	return nil
-}
-
-func copyFile(sourcePath, targetPath string) error {
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return errors.Wrap(err, "open source file")
-	}
-
-	defer source.Close()
-
-	target, err := os.Create(targetPath)
-	if err != nil {
-		return errors.Wrap(err, "create target file")
-	}
-
-	defer target.Close()
-
-	if _, err := io.Copy(target, source); err != nil {
-		return errors.Wrap(err, "copy file")
-	}
-
 	return nil
 }

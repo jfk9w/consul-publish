@@ -5,13 +5,8 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
-
-	"github.com/AlekSi/pointer"
-	"github.com/coreos/go-systemd/daemon"
-	"github.com/jfk9w-go/confi"
-	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 
 	"github.com/jfk9w/consul-publish/internal/api"
 	"github.com/jfk9w/consul-publish/internal/log"
@@ -19,6 +14,12 @@ import (
 	"github.com/jfk9w/consul-publish/internal/target"
 	"github.com/jfk9w/consul-publish/internal/target/hosts"
 	"github.com/jfk9w/consul-publish/internal/target/porkbun"
+
+	"github.com/AlekSi/pointer"
+	"github.com/coreos/go-systemd/daemon"
+	"github.com/jfk9w-go/confi"
+	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 )
 
 type Config struct {
@@ -46,6 +47,14 @@ type Config struct {
 	} `yaml:"porkbun,omitempty" doc:"Porkbun target settings"`
 }
 
+var exit = []os.Signal{
+	syscall.SIGHUP,
+	syscall.SIGINT,
+	syscall.SIGQUIT,
+	syscall.SIGABRT,
+	syscall.SIGTERM,
+}
+
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -54,34 +63,20 @@ func main() {
 		}
 	}()
 
-	ctx, cancel := signal.NotifyContext(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), exit...)
 	defer cancel()
 
+	var work sync.WaitGroup
+	defer work.Wait()
+
+	work.Add(1)
 	go func() {
+		defer work.Done()
 		<-ctx.Done()
 		notify(daemon.SdNotifyStopping)
 	}()
 
-	cfg, schema, err := confi.Get[Config](ctx, "consul-publish")
-	if err != nil {
-		log.Error(ctx, "read config", err)
-		os.Exit(1)
-	}
-
-	if pointer.Get(cfg.Dump).Schema {
-		dump(schema, confi.YAML)
-		return
-	}
-
-	if pointer.Get(cfg.Dump).Values {
-		cfg.Dump = nil
-		dump(cfg, confi.YAML)
-		return
-	}
-
-	defer log.Info(ctx, "shutdown")
-
-	if err := run(ctx, cfg); err != nil {
+	if err := run(ctx); err != nil {
 		for _, err := range multierr.Errors(err) {
 			log.Error(ctx, err.Error())
 		}
@@ -90,7 +85,25 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, cfg *Config) error {
+func run(ctx context.Context) error {
+	cfg, schema, err := confi.Get[Config](ctx, "consul-publish")
+	if err != nil {
+		return errors.Wrap(err, "read config")
+	}
+
+	if pointer.Get(cfg.Dump).Schema {
+		dump(schema, confi.YAML)
+		return nil
+	}
+
+	if pointer.Get(cfg.Dump).Values {
+		cfg.Dump = nil
+		dump(cfg, confi.YAML)
+		return nil
+	}
+
+	defer log.Info(ctx, "shutdown")
+
 	consul, err := api.NewConsul(cfg.Address, cfg.Token)
 	if err != nil {
 		return errors.Wrap(err, "create consul client")
