@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"strings"
 
 	capi "github.com/hashicorp/consul/api"
 )
@@ -68,14 +67,30 @@ type Target interface {
 }
 
 func Subdomain(name, domain string) string {
+	if name == "" {
+		return domain
+	}
+
 	return name + "." + domain
 }
 
 func NameDomain(subdomain string) (name, domain string) {
-	dot := strings.IndexRune(subdomain, '.')
-	if dot > 0 {
-		return subdomain[:dot], subdomain[dot+1:]
+	runes := []rune(subdomain)
+	first, second := -1, -1
+	for i := len(runes) - 1; i >= 0; i-- {
+		if runes[i] == '.' {
+			if first >= 0 {
+				second = i
+				break
+			}
+
+			first = i
+		}
 	}
 
-	return "", subdomain
+	if second < 0 {
+		return "", subdomain
+	}
+
+	return subdomain[:second], subdomain[second+1:]
 }

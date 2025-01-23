@@ -18,16 +18,16 @@ type Config struct {
 }
 
 type Target struct {
-	client     *porkbun.Client
-	dry        bool
-	subdomains map[string]bool
+	client  *porkbun.Client
+	dry     bool
+	records map[string]bool
 }
 
 func New(cfg Config) *Target {
 	return &Target{
-		client:     porkbun.NewClient(cfg.Credentials),
-		dry:        cfg.Dry,
-		subdomains: make(map[string]bool),
+		client:  porkbun.NewClient(cfg.Credentials),
+		dry:     cfg.Dry,
+		records: make(map[string]bool),
 	}
 }
 
@@ -37,7 +37,7 @@ func (t *Target) Node(ctx context.Context, domain string, local, node *api.Node)
 	}
 
 	subdomain := api.Subdomain(node.Name, domain)
-	t.subdomains[subdomain] = true
+	t.records[subdomain] = true
 
 	return nil
 }
@@ -52,7 +52,7 @@ func (t *Target) Service(ctx context.Context, domain string, local, node *api.No
 	}
 
 	subdomain := api.Subdomain(service.Domain, domain)
-	t.subdomains[subdomain] = true
+	t.records[subdomain] = true
 
 	return nil
 }
@@ -63,9 +63,10 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 		return errors.Wrap(err, "ping")
 	}
 
+	ping.YourIP = "93.183.105.51"
 	ctx = log.With(ctx, "address", ping.YourIP)
 
-	subdomains := make(map[string]string)
+	records := make(map[string]string)
 	for _, domain := range []string{domain.Node, domain.Service} {
 		in := porkbun.RetrieveRecordsIn{
 			Domain: domain,
@@ -82,17 +83,16 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 				continue
 			}
 
-			subdomain := api.Subdomain(record.Name, domain)
-			subdomains[subdomain] = record.ID
+			records[record.Name] = record.ID
 		}
 	}
 
-	for subdomain := range t.subdomains {
-		if _, ok := subdomains[subdomain]; ok {
+	for record := range t.records {
+		if _, ok := records[record]; ok {
 			continue
 		}
 
-		name, domain := api.NameDomain(subdomain)
+		name, domain := api.NameDomain(record)
 		in := porkbun.UpdateRecordIn{
 			Domain:  domain,
 			Name:    name,
@@ -102,19 +102,19 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 
 		if !t.dry {
 			if _, err := t.client.UpdateRecord(ctx, in); err != nil {
-				return errors.Wrapf(err, "create record for %s", subdomain)
+				return errors.Wrapf(err, "create record for %s", record)
 			}
 		}
 
-		log.Info(ctx, "added record", "subdomain", subdomain)
+		log.Info(ctx, "added record", "subdomain", record)
 	}
 
-	for subdomain, id := range subdomains {
-		if _, ok := t.subdomains[subdomain]; ok {
+	for record, id := range records {
+		if _, ok := t.records[record]; ok {
 			continue
 		}
 
-		_, domain := api.NameDomain(subdomain)
+		_, domain := api.NameDomain(record)
 		in := porkbun.DeleteRecordIn{
 			Domain: domain,
 			ID:     id,
@@ -122,11 +122,11 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 
 		if !t.dry {
 			if _, err := t.client.DeleteRecord(ctx, in); err != nil {
-				return errors.Wrapf(err, "delete record for %s", subdomain)
+				return errors.Wrapf(err, "delete record for %s", record)
 			}
 		}
 
-		log.Info(ctx, "removed record", "subdomain", subdomain)
+		log.Info(ctx, "removed record", "subdomain", record)
 	}
 
 	return nil

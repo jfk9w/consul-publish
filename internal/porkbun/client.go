@@ -64,13 +64,13 @@ func execute[R any](ctx context.Context, c *Client, in exchange[R]) (none R, _ e
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return none, errors.New("unexpected status code: " + resp.Status)
-	}
-
 	data, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return none, errors.Wrap(err, "read response body")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return none, errors.New("unexpected status code: " + resp.Status)
 	}
 
 	var status struct {
