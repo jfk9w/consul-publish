@@ -7,8 +7,6 @@ github.com/armon/go-metrics
 # github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 ## explicit
 github.com/coreos/go-systemd/daemon
-# github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
-## explicit
 # github.com/fatih/color v1.16.0
 ## explicit; go 1.17
 github.com/fatih/color
@@ -64,8 +62,6 @@ go.uber.org/multierr
 ## explicit; go 1.20
 golang.org/x/exp/constraints
 golang.org/x/exp/slices
-# golang.org/x/sync v0.10.0
-## explicit; go 1.18
 # golang.org/x/sys v0.19.0
 ## explicit; go 1.18
 golang.org/x/sys/unix

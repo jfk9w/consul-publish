@@ -2,7 +2,6 @@ package porkbun
 
 import (
 	"encoding/json"
-	"strconv"
 )
 
 type exchange[R any] interface {
@@ -39,7 +38,7 @@ func (in RetrieveRecordsIn) path() string {
 		return path
 	}
 
-	path += "/retrieve"
+	path += "/retrieve/" + in.Domain
 	if in.ID != "" {
 		path += "/" + in.ID
 	}
@@ -50,7 +49,7 @@ func (in RetrieveRecordsIn) path() string {
 func (in RetrieveRecordsIn) out() (_ RetrieveRecordsOut) { return }
 
 type Record struct {
-	ID       int64  `json:"id"`
+	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Type     string `json:"type"`
 	Content  string `json:"content"`
@@ -65,7 +64,7 @@ type RetrieveRecordsOut struct {
 
 type UpdateRecordIn struct {
 	Domain   string `json:"-" validate:"required"`
-	ID       int64  `json:"-"`
+	ID       string `json:"-"`
 	Name     string `json:"name,omitempty"`
 	Type     string `json:"type" validate:"required"`
 	Content  string `json:"content" validate:"required"`
@@ -75,8 +74,8 @@ type UpdateRecordIn struct {
 
 func (in UpdateRecordIn) path() string {
 	path := "/dns"
-	if in.ID != 0 {
-		path += "/edit/" + in.Domain + "/" + strconv.FormatInt(in.ID, 10)
+	if in.ID != "" {
+		path += "/edit/" + in.Domain + "/" + in.ID
 		return path
 	}
 
@@ -91,11 +90,11 @@ type UpdateRecordOut struct {
 
 type DeleteRecordIn struct {
 	Domain string `json:"-" validate:"required"`
-	ID     int64  `json:"-" validate:"required"`
+	ID     string `json:"-" validate:"required"`
 }
 
 func (in DeleteRecordIn) path() string {
-	return "/dns/delete/" + in.Domain + "/" + strconv.FormatInt(in.ID, 10)
+	return "/dns/delete/" + in.Domain + "/" + in.ID
 }
 
 func (in DeleteRecordIn) out() (_ DeleteRecordOut) { return }

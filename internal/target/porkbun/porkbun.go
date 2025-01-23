@@ -65,11 +65,11 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 
 	ctx = log.With(ctx, "address", ping.YourIP)
 
-	subdomains := make(map[string]int64)
+	subdomains := make(map[string]string)
 	for _, domain := range []string{domain.Node, domain.Service} {
 		in := porkbun.RetrieveRecordsIn{
 			Domain: domain,
-			Type:   RecordType,
+			// Type:   RecordType,
 		}
 
 		resp, err := t.client.RetrieveRecords(ctx, in)
@@ -78,10 +78,12 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 		}
 
 		for _, record := range resp.Records {
-			if record.Content == ping.YourIP {
-				subdomain := api.Subdomain(record.Name, domain)
-				subdomains[subdomain] = record.ID
+			if record.Type != RecordType || record.Content != ping.YourIP {
+				continue
 			}
+
+			subdomain := api.Subdomain(record.Name, domain)
+			subdomains[subdomain] = record.ID
 		}
 	}
 
