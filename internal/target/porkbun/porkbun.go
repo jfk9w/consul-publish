@@ -63,7 +63,6 @@ func (t *Target) Commit(ctx context.Context, domain api.Domain) error {
 		return errors.Wrap(err, "ping")
 	}
 
-	ping.YourIP = "93.183.105.51"
 	ctx = log.With(ctx, "address", ping.YourIP)
 
 	records := make(map[string]string)
