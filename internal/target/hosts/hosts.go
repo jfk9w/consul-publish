@@ -89,6 +89,10 @@ func (t Target) Commit(ctx context.Context, domain api.Domain) error {
 		return errors.Wrap(err, "create temp file")
 	}
 
+	if err := file.Chmod(0o644); err != nil {
+		return errors.Wrap(err, "chmod temp file")
+	}
+
 	defer os.RemoveAll(file.Name())
 
 	ctx = log.With(ctx, "tmp", file.Name())
