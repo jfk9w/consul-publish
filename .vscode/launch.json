@@ -12,6 +12,15 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/consul-publish",
             "args": ["--config.file=config.yml"]
+        },
+        {
+            "name": "v2",
+            "cwd": "${workspaceFolder}",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/v2",
+            "args": ["--config.file=config.yml"]
         }
     ]
 }
