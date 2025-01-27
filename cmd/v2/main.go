@@ -2,19 +2,29 @@ package main
 
 import (
 	"context"
-	"iter"
+	"log/slog"
+	"os"
 	"os/signal"
+	"strings"
 	"syscall"
-	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	capi "github.com/hashicorp/consul/api"
 	"github.com/jfk9w-go/confi"
+	"github.com/jfk9w/consul-publish/internal/consul"
+	"github.com/jfk9w/consul-publish/internal/listeners"
+	"github.com/jfk9w/consul-publish/internal/listeners/hosts"
 )
 
 type Config struct {
-	Address string `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
-	Token   string `yaml:"token" doc:"Consul token"`
+	Address string            `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
+	Token   string            `yaml:"token" doc:"Consul token"`
+	Domains listeners.Domains `yaml:"domain"`
+
+	Hosts struct {
+		Enabled      bool `yaml:"enabled,omitempty" doc:"Enable hosts target"`
+		hosts.Config `yaml:",inline"`
+	} `yaml:"hosts,omitempty" doc:"Hosts target settings"`
 }
 
 func newConsulClient(address, token string) (*capi.Client, error) {
@@ -24,8 +34,40 @@ func newConsulClient(address, token string) (*capi.Client, error) {
 	return capi.NewClient(cfg)
 }
 
+func newLogger() *slog.Logger {
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelDebug,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == "source" {
+				if source, ok := a.Value.Any().(*slog.Source); ok {
+					fn := source.Function
+					slash := strings.LastIndex(fn, "/")
+					if slash > 0 {
+						fn = fn[slash+1:]
+					}
+
+					return slog.String("caller", fn)
+				}
+			}
+
+			return a
+		},
+	})
+
+	return slog.New(handler)
+}
+
+var exit = []os.Signal{
+	syscall.SIGHUP,
+	syscall.SIGINT,
+	syscall.SIGQUIT,
+	syscall.SIGABRT,
+	syscall.SIGTERM,
+}
+
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGILL, syscall.SIGHUP)
+	ctx, cancel := signal.NotifyContext(context.Background(), exit...)
 	defer cancel()
 
 	cfg, _, err := confi.Get[Config](ctx, "consul-publish")
@@ -38,48 +80,29 @@ func main() {
 		panic(err)
 	}
 
-	for nodes, err := range watch(ctx, client, nodes()) {
-		if err != nil {
-			panic(err)
-		}
+	slog.SetDefault(newLogger())
+	defer slog.Info("shutdown")
 
-		spew.Dump(nodes)
-		spew.Dump(time.Now())
+	var listeners []consul.Listener
+
+	if cfg.Hosts.Enabled {
+		listeners = append(listeners, hosts.New(cfg.Domains, cfg.Hosts.Config))
+	}
+
+	if err := consul.Watch(ctx, client, listeners...); err != nil {
+		panic(err)
 	}
 }
 
-func nodes() WatchFunc[[]*capi.Node] {
-	return func(client *capi.Client, options *capi.QueryOptions) ([]*capi.Node, *capi.QueryMeta, error) {
-		return client.Catalog().Nodes(options)
+type DebugListener struct{}
+
+func (DebugListener) Keys() []string {
+	return []string{
+		"caddy/service",
 	}
 }
 
-type WatchFunc[V any] func(client *capi.Client, options *capi.QueryOptions) (V, *capi.QueryMeta, error)
-
-func watch[V any](ctx context.Context, client *capi.Client, fn WatchFunc[V]) iter.Seq2[V, error] {
-	return func(yield func(V, error) bool) {
-		var none V
-		index := uint64(0)
-		for {
-			options := new(capi.QueryOptions)
-			options.WaitIndex = index
-			options.Datacenter = "dc1"
-
-			value, meta, err := fn(client, options.WithContext(ctx))
-			if err != nil {
-				yield(none, err)
-				return
-			}
-
-			if index == meta.LastIndex {
-				continue
-			}
-
-			if !yield(value, nil) {
-				return
-			}
-
-			index = meta.LastIndex
-		}
-	}
+func (DebugListener) Notify(ctx context.Context, state *consul.State) error {
+	spew.Dump(state)
+	return nil
 }

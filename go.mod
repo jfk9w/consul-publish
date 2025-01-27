@@ -4,9 +4,14 @@ go 1.23.4
 
 require github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 
+require golang.org/x/sync v0.10.0
+
+require github.com/tiendc/go-deepcopy v1.2.0 // indirect
+
 require (
 	github.com/AlekSi/pointer v1.2.0
 	github.com/armon/go-metrics v0.4.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/hashicorp/consul/api v1.31.0
 	github.com/hashicorp/errwrap v1.1.0 // indirect
