@@ -1,34 +1,22 @@
 package listeners
 
-import "github.com/jfk9w/consul-publish/internal/consul"
+import (
+	"strings"
 
-type Visibility string
-
-const (
-	Local  Visibility = "local"
-	Public Visibility = "public"
+	"github.com/jfk9w/consul-publish/internal/lib"
 )
 
 const (
-	NodeRegionKey       = "region"
-	NodeVisibilityKey   = "visibility"
-	DomainNameKey       = "domain-name"
-	DomainVisibilityKey = "domain-visibility"
+	DomainNameKey   = "domain-name"
+	PublishHostKey  = "publish-host"
+	PublishCaddyKey = "publish-caddy"
 )
 
-func GetRegion(node consul.Node) string {
-	return node.Meta[NodeRegionKey]
-}
-
-func GetVisibility(node consul.Node) Visibility {
-	return Visibility(node.Meta[NodeVisibilityKey])
-}
-
-func GetDomainName(service consul.Service) (string, bool) {
-	value, ok := service.Meta[DomainNameKey]
+func GetDomainName(meta map[string]string) (string, bool) {
+	value, ok := meta[DomainNameKey]
 	return value, ok
 }
 
-func GetDomainVisibility(service consul.Service) Visibility {
-	return Visibility(service.Meta[DomainVisibilityKey])
+func GetGroups(meta map[string]string, key string) lib.Set[string] {
+	return lib.SetOf(strings.Fields(meta[key])...)
 }

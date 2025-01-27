@@ -5,7 +5,6 @@ go 1.23.4
 require (
 	github.com/AlekSi/pointer v1.2.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/hashicorp/consul/api v1.31.0
 	github.com/jfk9w-go/confi v0.0.5
 	github.com/pkg/errors v0.9.1
@@ -17,6 +16,7 @@ require (
 require (
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
+	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect

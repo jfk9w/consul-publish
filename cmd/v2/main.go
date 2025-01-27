@@ -8,23 +8,27 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/davecgh/go-spew/spew"
 	capi "github.com/hashicorp/consul/api"
 	"github.com/jfk9w-go/confi"
+
 	"github.com/jfk9w/consul-publish/internal/consul"
-	"github.com/jfk9w/consul-publish/internal/listeners"
+	"github.com/jfk9w/consul-publish/internal/listeners/caddy"
 	"github.com/jfk9w/consul-publish/internal/listeners/hosts"
 )
 
 type Config struct {
-	Address string            `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
-	Token   string            `yaml:"token" doc:"Consul token"`
-	Domains listeners.Domains `yaml:"domain"`
+	Address string `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
+	Token   string `yaml:"token" doc:"Consul token"`
 
 	Hosts struct {
 		Enabled      bool `yaml:"enabled,omitempty" doc:"Enable hosts target"`
 		hosts.Config `yaml:",inline"`
 	} `yaml:"hosts,omitempty" doc:"Hosts target settings"`
+
+	Caddy struct {
+		Enabled      bool `yaml:"enabled,omitempty" doc:"Enable caddy target"`
+		caddy.Config `yaml:",inline"`
+	} `yaml:"caddy,omitempty" doc:"Caddy target settings"`
 }
 
 func newConsulClient(address, token string) (*capi.Client, error) {
@@ -86,23 +90,14 @@ func main() {
 	var listeners []consul.Listener
 
 	if cfg.Hosts.Enabled {
-		listeners = append(listeners, hosts.New(cfg.Domains, cfg.Hosts.Config))
+		listeners = append(listeners, hosts.New(cfg.Hosts.Config))
+	}
+
+	if cfg.Caddy.Enabled {
+		listeners = append(listeners, caddy.New(cfg.Caddy.Config))
 	}
 
 	if err := consul.Watch(ctx, client, listeners...); err != nil {
 		panic(err)
 	}
-}
-
-type DebugListener struct{}
-
-func (DebugListener) Keys() []string {
-	return []string{
-		"caddy/service",
-	}
-}
-
-func (DebugListener) Notify(ctx context.Context, state *consul.State) error {
-	spew.Dump(state)
-	return nil
 }

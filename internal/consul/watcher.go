@@ -5,6 +5,7 @@ import (
 	"errors"
 	"iter"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -61,6 +62,7 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 		slog.Info("watcher init complete")
 
 		var (
+			prev   *State
 			change change
 			ts     time.Time
 			mu     sync.Mutex
@@ -78,6 +80,15 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 			change.change(w.state)
 			ts = time.Now()
 			mu.Unlock()
+
+			if reflect.DeepEqual(w.state, prev) {
+				continue
+			}
+
+			prev = new(State)
+			if err := deepcopy.Copy(prev, w.state); err != nil {
+				return err
+			}
 
 			tts := ts
 			w.work.Go(cancellable(ctx, func() error {
@@ -113,16 +124,18 @@ func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
 	init := new(sync.WaitGroup)
 	w.init.Add(1)
 	w.work.Go(cancellable(ctx, func() error {
+		defer func() {
+			if init != nil {
+				w.init.Done()
+			}
+		}()
+
 		log := slog.Default()
 		log.Info("watcher started")
 		defer log.Info("watcher stopped")
 
 		for nodes, err := range watch(ctx, client, nodes()) {
 			if err != nil {
-				if init != nil {
-					w.init.Done()
-				}
-
 				log.Error(err.Error())
 				return err
 			}
@@ -133,10 +146,11 @@ func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
 				actual[node.Node] = true
 			}
 
-			if init != nil {
-				init.Wait()
-				init = nil
-				w.init.Done()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case w.change <- nodeChange(nodes):
+				break
 			}
 
 			for node, cancel := range w.nodes {
@@ -146,6 +160,19 @@ func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
 
 				cancel()
 				delete(w.nodes, node)
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case w.change <- nodeDelete(node):
+					break
+				}
+			}
+
+			if init != nil {
+				init.Wait()
+				init = nil
+				w.init.Done()
 			}
 		}
 

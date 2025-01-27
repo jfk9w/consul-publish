@@ -1,0 +1,26 @@
+
+relay.sonc.top {
+    respond /endpoint 200 {
+        body `{
+    "relays": [
+        { "url": "relay://naiad.k94.top:22067" },
+        { "url": "relay://neso.k94.top:22067" }
+    ]
+    }`
+    
+        close
+    }
+}
+
+disco.sonc.top {
+    reverse_proxy 127.0.0.1:8443 {
+        header_up X-Client-Port {http.request.remote.port}
+        header_up X-Tls-Client-Cert-Der-Base64 {http.request.tls.client.certificate_der_base64}
+    }
+    
+    tls {
+        client_auth {
+            mode request
+        }
+    }
+}
