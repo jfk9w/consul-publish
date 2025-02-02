@@ -43,7 +43,7 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 
 	keys := make(map[string]bool)
 	for _, listener := range listeners {
-		for _, prefix := range listener.Keys() {
+		for _, prefix := range listener.KV() {
 			prefix = strings.Trim(prefix, "/")
 			prefix += "/"
 			if _, ok := keys[prefix]; ok {

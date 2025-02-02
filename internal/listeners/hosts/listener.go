@@ -13,7 +13,7 @@ import (
 )
 
 type Config struct {
-	File string `yaml:"file" default:"/etc/hosts" doc:"Hosts file path"`
+	File File `yaml:",inline"`
 }
 
 type Listener struct {
@@ -26,7 +26,7 @@ func New(cfg Config) Listener {
 	}
 }
 
-func (l Listener) Keys() []string {
+func (l Listener) KV() []string {
 	return nil
 }
 
@@ -45,14 +45,7 @@ func (l Listener) Notify(ctx context.Context, state *consul.State) error {
 		hosts.add(address, node.Name)
 	}
 
-	file := File{
-		Path:  l.cfg.File,
-		Mode:  0o644,
-		User:  "root",
-		Group: "root",
-	}
-
-	_, err := file.Write(func(file io.Writer) error {
+	_, err := l.cfg.File.Write(func(file io.Writer) error {
 		for address, names := range hosts.iter() {
 			if _, err := fmt.Fprintln(file, address, strings.Join(names, " ")); err != nil {
 				return errors.Wrap(err, "write to temp file")

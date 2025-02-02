@@ -3,3 +3,4 @@ hosts.txt
 __debug_bin*
 bin/
 .idea/
+*.Caddyfile

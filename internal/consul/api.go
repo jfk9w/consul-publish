@@ -3,6 +3,6 @@ package consul
 import "context"
 
 type Listener interface {
-	Keys() []string
+	KV() []string
 	Notify(ctx context.Context, state *State) error
 }

@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os/exec"
 	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -18,59 +21,61 @@ import (
 var lineStart = regexp.MustCompile(`(?m)^`)
 
 type Config struct {
-	KeyPrefix string `yaml:"keyPrefix"`
-	Files     struct {
-		HTTP string `yaml:"http"`
-	} `yaml:"files"`
+	KV   string `yaml:"kv"`
+	HTTP File   `yaml:"http"`
 	Exec string `yaml:"exec"`
 }
 
 type Listener struct {
-	cfg  Config
-	exec []string
+	cfg Config
 }
 
-func New(cfg Config) (*Listener, error) {
+func New(cfg Config) *Listener {
 	return &Listener{
-		cfg:  cfg,
-		exec: strings.Fields(cfg.Exec),
-	}, nil
+		cfg: cfg,
+	}
 }
 
-func (l *Listener) Keys() []string {
+func (l *Listener) KV() []string {
 	return []string{
-		l.cfg.KeyPrefix,
+		l.cfg.KV,
 	}
 }
 
 func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
-	definitions, ok := state.KV.Get(l.cfg.KeyPrefix).(consul.Folder)
+	definitions, ok := state.KV.Get(l.cfg.KV).(consul.Folder)
 	if !ok {
-		return errors.Errorf("%s is not a folder", l.cfg.KeyPrefix)
+		return errors.Errorf("%s is not a folder", l.cfg.KV)
 	}
 
 	self := state.Nodes[state.Self]
-	services := make(map[string][]Service)
+	services := make(map[string][]Instance)
 	for _, node := range state.Nodes {
 		for _, service := range node.Services {
 			if _, ok := GetDomainName(service.Meta); !ok {
 				continue
 			}
 
-			if !state.InGroup(service.Meta, PublishCaddyKey, self.Name) {
+			if !state.InGroup(service.Meta, PublishHTTPKey, self.Name) {
 				continue
 			}
 
 			service.Address = GetLocalAddress(self, service)
 
-			services[service.Name] = append(services[service.Name], Service{
+			services[service.Name] = append(services[service.Name], Instance{
 				Node:    node,
 				Service: service,
 			})
 		}
 	}
 
-	changedHTTP, err := l.writeHTTP(services, definitions)
+	for _, instances := range services {
+		sort.Slice(instances, func(i, j int) bool {
+			return instances[i].Service.Address < instances[j].Service.Address
+		})
+	}
+
+	changedHTTP, err := l.writeHTTP(services, maps.Collect(definitions.Values()))
 	if err != nil {
 		return errors.Wrap(err, "write HTTP")
 	}
@@ -86,24 +91,17 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 }
 
 func (l *Listener) writeHTTP(
-	services map[string][]Service,
-	definitions consul.Folder,
+	services map[string][]Instance,
+	definitions map[string]consul.Value,
 ) (bool, error) {
-	file := File{
-		Path:  l.cfg.Files.HTTP,
-		Mode:  0o640,
-		User:  "root",
-		Group: "caddy",
-	}
-
-	return file.Write(func(file io.Writer) error {
-		for name, definition := range definitions.Values() {
-			services, ok := services[name]
+	return l.cfg.HTTP.Write(func(file io.Writer) error {
+		for _, name := range slices.Sorted(maps.Keys(definitions)) {
+			instances, ok := services[name]
 			if !ok {
 				continue
 			}
 
-			definition := strings.Trim(string(definition), " \n\t\v")
+			definition := strings.Trim(string(definitions[name]), " \n\t\v")
 			definition = lineStart.ReplaceAllString(definition, "    ")
 
 			tmpl, err := template.New(name).Delims("[[", "]]").Parse(definition)
@@ -111,13 +109,13 @@ func (l *Listener) writeHTTP(
 				return errors.Wrapf(err, "parse template for %s", name)
 			}
 
-			domain, _ := GetDomainName(services[0].Service.Meta)
+			domain, _ := GetDomainName(instances[0].Service.Meta)
 
 			if _, err := fmt.Fprintf(file, "\n%s {\n", domain); err != nil {
 				return errors.Wrapf(err, "write start template for %s", name)
 			}
 
-			if err := tmpl.Execute(file, services); err != nil {
+			if err := tmpl.Execute(file, instances); err != nil {
 				return errors.Wrapf(err, "execute template for %s", name)
 			}
 
@@ -130,7 +128,7 @@ func (l *Listener) writeHTTP(
 	})
 }
 
-type Service struct {
+type Instance struct {
 	Node    consul.Node
 	Service consul.Service
 }

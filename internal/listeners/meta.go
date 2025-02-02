@@ -7,9 +7,8 @@ import (
 )
 
 const (
-	DomainNameKey   = "domain-name"
-	PublishHostKey  = "publish-host"
-	PublishCaddyKey = "publish-caddy"
+	DomainNameKey  = "domain-name"
+	PublishHTTPKey = "publish-http"
 )
 
 func GetDomainName(meta map[string]string) (string, bool) {
