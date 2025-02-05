@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/go-systemd/v22/daemon"
 	capi "github.com/hashicorp/consul/api"
 	"github.com/tiendc/go-deepcopy"
 	"golang.org/x/sync/errgroup"
@@ -60,7 +59,6 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 
 	w.work.Go(cancellable(ctx, func() error {
 		w.init.Wait()
-		notify(daemon.SdNotifyReady)
 		slog.Info("watcher init complete")
 
 		var (
@@ -315,11 +313,5 @@ func cancellable(ctx context.Context, fn func() error) func() error {
 		}
 
 		return err
-	}
-}
-
-func notify(state string) {
-	if _, err := daemon.SdNotify(false, state); err != nil {
-		slog.Warn("failed to notify systemd", "error", err)
 	}
 }
