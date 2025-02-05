@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
+	"github.com/coreos/go-systemd/v22/daemon"
 	capi "github.com/hashicorp/consul/api"
 	"github.com/jfk9w-go/confi"
 
@@ -97,7 +99,28 @@ func main() {
 		listeners = append(listeners, caddy.New(cfg.Caddy.Config))
 	}
 
+	listeners = append(listeners, new(systemdListener))
+
 	if err := consul.Watch(ctx, client, listeners...); err != nil {
 		panic(err)
+	}
+}
+
+type systemdListener struct {
+	once sync.Once
+}
+
+func (l *systemdListener) KV() []string {
+	return nil
+}
+
+func (l *systemdListener) Notify(ctx context.Context, state *consul.State) error {
+	l.once.Do(func() { notify(daemon.SdNotifyReady) })
+	return nil
+}
+
+func notify(state string) {
+	if _, err := daemon.SdNotify(false, state); err != nil {
+		slog.Warn("failed to notify systemd", "error", err)
 	}
 }

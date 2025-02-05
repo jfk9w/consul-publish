@@ -3,6 +3,7 @@ module github.com/jfk9w/consul-publish
 go 1.23.4
 
 require (
+	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/hashicorp/consul/api v1.31.0
 	github.com/jfk9w-go/confi v0.0.5
 	github.com/pkg/errors v0.9.1

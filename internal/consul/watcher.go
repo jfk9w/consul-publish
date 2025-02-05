@@ -59,6 +59,13 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 
 	w.work.Go(cancellable(ctx, func() error {
 		w.init.Wait()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			break
+		}
+
 		slog.Info("watcher init complete")
 
 		var (
@@ -121,22 +128,27 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 }
 
 func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
-	init := new(sync.WaitGroup)
-	w.init.Add(1)
-	w.work.Go(cancellable(ctx, func() error {
-		defer func() {
-			if init != nil {
-				w.init.Done()
-			}
-		}()
+	var (
+		init = new(sync.WaitGroup)
+		once sync.Once
+	)
 
+	w.init.Add(1)
+	w.work.Go(cancellable(ctx, func() (err error) {
 		log := slog.Default()
 		log.Info("watcher started")
-		defer log.Info("watcher stopped")
+		defer func() {
+			if isCanceled(ctx, err) {
+				log.Info("watcher stopped")
+			} else {
+				log.Warn("watcher error", "error", err)
+			}
+
+			once.Do(w.init.Done)
+		}()
 
 		for nodes, err := range watch(ctx, client, nodes()) {
 			if err != nil {
-				log.Error(err.Error())
 				return err
 			}
 
@@ -172,11 +184,11 @@ func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
 			if init != nil {
 				init.Wait()
 				init = nil
-				w.init.Done()
+				once.Do(w.init.Done)
 			}
 		}
 
-		return nil
+		return
 	}))
 }
 
@@ -192,20 +204,24 @@ func (w *watcher) watchServices(ctx context.Context, client *capi.Client, node s
 		init.Add(1)
 	}
 
-	w.work.Go(cancellable(ctx, func() error {
-		defer cancel()
-
+	w.work.Go(cancellable(ctx, func() (err error) {
 		log := slog.With("node", node)
 		log.Info("watcher started")
-		defer log.Info("watcher stopped")
+		defer func() {
+			if isCanceled(ctx, err) {
+				log.Info("watcher stopped")
+			} else {
+				log.Warn("watcher error", "error", err)
+			}
+
+			cancel()
+			if init != nil {
+				init.Done()
+			}
+		}()
 
 		for services, err := range watch(ctx, client, services(node)) {
 			if err != nil {
-				if init != nil {
-					init.Done()
-				}
-
-				log.Error(err.Error())
 				return err
 			}
 
@@ -223,21 +239,28 @@ func (w *watcher) watchServices(ctx context.Context, client *capi.Client, node s
 			}
 		}
 
-		return nil
+		return
 	}))
 }
 
 func (w *watcher) watchKeys(ctx context.Context, client *capi.Client, prefix string) {
 	var once sync.Once
 	w.init.Add(1)
-	w.work.Go(cancellable(ctx, func() error {
+	w.work.Go(cancellable(ctx, func() (err error) {
 		log := slog.With("prefix", prefix)
 		log.Info("watcher started")
-		defer log.Info("watcher stopped")
+		defer func() {
+			if isCanceled(ctx, err) {
+				log.Info("watcher stopped")
+			} else {
+				log.Warn("watcher error", "error", err)
+			}
+
+			once.Do(w.init.Done)
+		}()
 
 		for keys, err := range watch(ctx, client, keys(prefix)) {
 			if err != nil {
-				log.Error(err.Error())
 				return err
 			}
 
@@ -249,11 +272,11 @@ func (w *watcher) watchKeys(ctx context.Context, client *capi.Client, prefix str
 				log.Debug("watcher update")
 				once.Do(w.init.Done)
 			case <-ctx.Done():
-				return err
+				return ctx.Err()
 			}
 		}
 
-		return nil
+		return
 	}))
 }
 
@@ -308,10 +331,14 @@ func watch[V any](ctx context.Context, client *capi.Client, fn WatchFunc[V]) ite
 func cancellable(ctx context.Context, fn func() error) func() error {
 	return func() error {
 		err := fn()
-		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		if isCanceled(ctx, err) {
 			return nil
 		}
 
 		return err
 	}
+}
+
+func isCanceled(ctx context.Context, err error) bool {
+	return errors.Is(err, context.Canceled) && ctx.Err() != nil
 }
