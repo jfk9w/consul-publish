@@ -87,7 +87,6 @@ func main() {
 	}
 
 	slog.SetDefault(newLogger())
-	defer slog.Info("shutdown")
 
 	var listeners []consul.Listener
 
@@ -104,6 +103,8 @@ func main() {
 	if err := consul.Watch(ctx, client, listeners...); err != nil {
 		panic(err)
 	}
+
+	slog.Info("shutdown")
 }
 
 type systemdListener struct {
