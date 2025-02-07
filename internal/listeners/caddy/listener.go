@@ -54,7 +54,7 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 	for _, node := range state.Nodes {
 		for _, service := range node.Services {
 			service.Address = GetLocalAddress(self, service)
-			services[service.Name] = append(services[service.Name], Instance{
+			services[service.ID] = append(services[service.ID], Instance{
 				Node:    node,
 				Service: service,
 			})
@@ -109,13 +109,13 @@ func (l *Listener) writePath(
 			}
 		}
 
-		sort.Slice(instances, func(i, j int) bool { return instances[i].Service.Name < instances[j].Service.Name })
+		sort.Slice(instances, func(i, j int) bool { return instances[i].Service.ID < instances[j].Service.ID })
 
 		for _, instance := range instances {
-			name, port := instance.Service.Name, instance.Service.Port
+			id, port := instance.Service.ID, instance.Service.Port
 			if _, err := fmt.Fprintf(file,
 				"\nredir /%s /%s/\nhandle /%s/* {\n    reverse_proxy 127.0.0.1:%d\n}\n",
-				name, name, name, port,
+				id, id, id, port,
 			); err != nil {
 				return err
 			}
@@ -131,9 +131,9 @@ func (l *Listener) writeHTTP(
 	definitions map[string]consul.Value,
 ) (bool, error) {
 	return l.cfg.HTTP.Write(func(file io.Writer) error {
-		for _, name := range slices.Sorted(maps.Keys(definitions)) {
+		for _, id := range slices.Sorted(maps.Keys(definitions)) {
 			var instances []Instance
-			for _, instance := range services[name] {
+			for _, instance := range services[id] {
 				if _, ok := GetDomainName(instance.Service.Meta); !ok {
 					continue
 				}
@@ -149,26 +149,26 @@ func (l *Listener) writeHTTP(
 				continue
 			}
 
-			definition := strings.Trim(string(definitions[name]), " \n\t\v")
+			definition := strings.Trim(string(definitions[id]), " \n\t\v")
 			definition = lineStart.ReplaceAllString(definition, "    ")
 
-			tmpl, err := template.New(name).Delims("[[", "]]").Parse(definition)
+			tmpl, err := template.New(id).Delims("[[", "]]").Parse(definition)
 			if err != nil {
-				return errors.Wrapf(err, "parse template for %s", name)
+				return errors.Wrapf(err, "parse template for %s", id)
 			}
 
 			domain, _ := GetDomainName(instances[0].Service.Meta)
 
 			if _, err := fmt.Fprintf(file, "\n%s {\n", domain); err != nil {
-				return errors.Wrapf(err, "write start template for %s", name)
+				return errors.Wrapf(err, "write start template for %s", id)
 			}
 
 			if err := tmpl.Execute(file, instances); err != nil {
-				return errors.Wrapf(err, "execute template for %s", name)
+				return errors.Wrapf(err, "execute template for %s", id)
 			}
 
 			if _, err := fmt.Fprintln(file, "\n}"); err != nil {
-				return errors.Wrapf(err, "write end template for %s", name)
+				return errors.Wrapf(err, "write end template for %s", id)
 			}
 		}
 
