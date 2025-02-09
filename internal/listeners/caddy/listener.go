@@ -23,7 +23,6 @@ var lineStart = regexp.MustCompile(`(?m)^`)
 type Config struct {
 	KV   string `yaml:"kv"`
 	HTTP *File  `yaml:"http,omitempty"`
-	Path *File  `yaml:"path,omitempty"`
 	Exec string `yaml:"exec"`
 }
 
@@ -75,15 +74,7 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 		}
 	}
 
-	var changedPath bool
-	if l.cfg.Path != nil {
-		changedPath, err = l.writePath(state, services)
-		if err != nil {
-			return errors.Wrap(err, "write path")
-		}
-	}
-
-	if changedHTTP || changedPath {
+	if changedHTTP {
 		err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run()
 		if err != nil {
 			return errors.Wrap(err, "exec")
@@ -91,38 +82,6 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 	}
 
 	return nil
-}
-
-func (l *Listener) writePath(
-	state *consul.State,
-	services map[string][]Instance,
-) (bool, error) {
-	return l.cfg.Path.Write(func(file io.Writer) error {
-		var instances []Instance
-		for _, all := range services {
-			for _, instance := range all {
-				if !state.InGroup(instance.Service.Meta, PublishPathKey, state.Self) {
-					continue
-				}
-
-				instances = append(instances, instance)
-			}
-		}
-
-		sort.Slice(instances, func(i, j int) bool { return instances[i].Service.ID < instances[j].Service.ID })
-
-		for _, instance := range instances {
-			id, port := instance.Service.ID, instance.Service.Port
-			if _, err := fmt.Fprintf(file,
-				"\nredir /%s /%s/\nhandle /%s/* {\n    reverse_proxy 127.0.0.1:%d\n}\n",
-				id, id, id, port,
-			); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
 }
 
 func (l *Listener) writeHTTP(
