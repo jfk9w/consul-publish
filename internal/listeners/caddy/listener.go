@@ -21,10 +21,10 @@ import (
 var lineStart = regexp.MustCompile(`(?m)^`)
 
 type Config struct {
-	KV   string `yaml:"kv"`
-	HTTP *File  `yaml:"http,omitempty"`
-	Path *File  `yaml:"path,omitempty"`
-	Exec string `yaml:"exec"`
+	KV      string `yaml:"kv"`
+	Service *File  `yaml:"service,omitempty"`
+	Node    *File  `yaml:"node,omitempty"`
+	Exec    string `yaml:"exec"`
 }
 
 type Listener struct {
@@ -67,23 +67,23 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 		})
 	}
 
-	var changedHTTP bool
-	if l.cfg.HTTP != nil {
-		changedHTTP, err = l.writeHTTP(state, services, maps.Collect(definitions.Values()))
+	var changedService bool
+	if l.cfg.Service != nil {
+		changedService, err = l.writeService(state, services, maps.Collect(definitions.Values()))
 		if err != nil {
-			return errors.Wrap(err, "write HTTP")
+			return errors.Wrap(err, "write Service")
 		}
 	}
 
-	var changedPath bool
-	if l.cfg.Path != nil {
-		changedPath, err = l.writePath(state, services)
+	var changedNode bool
+	if l.cfg.Node != nil {
+		changedNode, err = l.writeNode(state, services, maps.Collect(definitions.Values()))
 		if err != nil {
 			return errors.Wrap(err, "write path")
 		}
 	}
 
-	if changedHTTP || changedPath {
+	if changedService || changedNode {
 		err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run()
 		if err != nil {
 			return errors.Wrap(err, "exec")
@@ -93,30 +93,64 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 	return nil
 }
 
-func (l *Listener) writePath(
+func (l *Listener) writeNode(
 	state *consul.State,
 	services map[string][]Instance,
+	definitions map[string]consul.Value,
 ) (bool, error) {
-	return l.cfg.Path.Write(func(file io.Writer) error {
-		var instances []Instance
-		for _, all := range services {
-			for _, instance := range all {
+	return l.cfg.Node.Write(func(file io.Writer) error {
+		domains := make(map[string][]Instance)
+		for _, id := range slices.Sorted(maps.Keys(services)) {
+			for _, instance := range services[id] {
+				if _, ok := definitions[id]; !ok {
+					continue
+				}
+
 				if !state.InGroup(instance.Service.Meta, PublishPathKey, state.Self) {
 					continue
 				}
 
-				instances = append(instances, instance)
+				domain, ok := GetDomainName(instance.Node.Meta)
+				if !ok {
+					domain = "http://" + instance.Node.Name
+				}
+
+				domains[domain] = append(domains[domain], instance)
 			}
 		}
 
-		sort.Slice(instances, func(i, j int) bool { return instances[i].Service.ID < instances[j].Service.ID })
+		for i, domain := range slices.Sorted(maps.Keys(domains)) {
+			if i > 0 {
+				if _, err := fmt.Fprintf(file, "\n"); err != nil {
+					return err
+				}
+			}
 
-		for _, instance := range instances {
-			id, port := instance.Service.ID, instance.Service.Port
-			if _, err := fmt.Fprintf(file,
-				"\nredir /%s /%s/\nhandle /%s/* {\n    reverse_proxy 127.0.0.1:%d\n}\n",
-				id, id, id, port,
-			); err != nil {
+			if _, err := fmt.Fprintf(file, "%s {", domain); err != nil {
+				return err
+			}
+
+			for _, instance := range domains[domain] {
+				if _, err := fmt.Fprintf(file, "\n"); err != nil {
+					return err
+				}
+
+				id := instance.Service.ID
+				tmpl, err := tmpl(definitions, id)
+				if err != nil {
+					return err
+				}
+
+				if err := tmpl.Execute(file, instance); err != nil {
+					return errors.Wrapf(err, "execute template for %s", id)
+				}
+
+				if _, err := fmt.Fprintf(file, "\n"); err != nil {
+					return err
+				}
+			}
+
+			if _, err := fmt.Fprintf(file, "}\n"); err != nil {
 				return err
 			}
 		}
@@ -125,13 +159,13 @@ func (l *Listener) writePath(
 	})
 }
 
-func (l *Listener) writeHTTP(
+func (l *Listener) writeService(
 	state *consul.State,
 	services map[string][]Instance,
 	definitions map[string]consul.Value,
 ) (bool, error) {
-	return l.cfg.HTTP.Write(func(file io.Writer) error {
-		for _, id := range slices.Sorted(maps.Keys(definitions)) {
+	return l.cfg.Service.Write(func(file io.Writer) error {
+		for i, id := range slices.Sorted(maps.Keys(definitions)) {
 			var instances []Instance
 			for _, instance := range services[id] {
 				if _, ok := GetDomainName(instance.Service.Meta); !ok {
@@ -149,17 +183,20 @@ func (l *Listener) writeHTTP(
 				continue
 			}
 
-			definition := strings.Trim(string(definitions[id]), " \n\t\v")
-			definition = lineStart.ReplaceAllString(definition, "    ")
-
-			tmpl, err := template.New(id).Delims("[[", "]]").Parse(definition)
+			tmpl, err := tmpl(definitions, id)
 			if err != nil {
-				return errors.Wrapf(err, "parse template for %s", id)
+				return err
 			}
 
 			domain, _ := GetDomainName(instances[0].Service.Meta)
 
-			if _, err := fmt.Fprintf(file, "\n%s {\n", domain); err != nil {
+			if i > 0 {
+				if _, err := fmt.Fprintf(file, "\n"); err != nil {
+					return err
+				}
+			}
+
+			if _, err := fmt.Fprintf(file, "%s {\n", domain); err != nil {
 				return errors.Wrapf(err, "write start template for %s", id)
 			}
 
@@ -174,6 +211,17 @@ func (l *Listener) writeHTTP(
 
 		return nil
 	})
+}
+
+func tmpl(definitions map[string]consul.Value, id string) (*template.Template, error) {
+	definition := strings.Trim(string(definitions[id]), " \n\t\v")
+	definition = lineStart.ReplaceAllString(definition, "    ")
+	tmpl, err := template.New(id).Delims("[[", "]]").Parse(definition)
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse template for %s", id)
+	}
+
+	return tmpl, nil
 }
 
 type Instance struct {
