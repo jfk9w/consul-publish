@@ -18,13 +18,16 @@ import (
 	. "github.com/jfk9w/consul-publish/internal/listeners"
 )
 
-var lineStart = regexp.MustCompile(`(?m)^`)
+var (
+	lineStart = regexp.MustCompile(`(?m)^`)
+)
 
 type Config struct {
 	KV      string `yaml:"kv"`
 	Service *File  `yaml:"service,omitempty"`
 	Node    *File  `yaml:"node,omitempty"`
 	Exec    string `yaml:"exec"`
+	Auth    string `yaml:"auth,omitempty"`
 }
 
 type Listener struct {
@@ -136,7 +139,7 @@ func (l *Listener) writeNode(
 				}
 
 				id := instance.Service.ID
-				tmpl, err := tmpl(definitions, id)
+				tmpl, err := l.tmpl(state, definitions, instance)
 				if err != nil {
 					return err
 				}
@@ -183,7 +186,7 @@ func (l *Listener) writeService(
 				continue
 			}
 
-			tmpl, err := tmpl(definitions, id)
+			tmpl, err := l.tmpl(state, definitions, instances[0])
 			if err != nil {
 				return err
 			}
@@ -213,10 +216,36 @@ func (l *Listener) writeService(
 	})
 }
 
-func tmpl(definitions map[string]consul.Value, id string) (*template.Template, error) {
+func (l *Listener) auth(state *consul.State, instance Instance, indent int) string {
+	if l.cfg.Auth == "" {
+		return ""
+	}
+
+	for _, service := range instance.Node.Services {
+		if service.ID == l.cfg.Auth {
+			address := GetLocalAddress(state.Nodes[state.Self], service)
+			text := fmt.Sprintf(`forward_auth %s:%d { 
+	uri /api/authz/forward-auth
+	copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
+}`, address, service.Port)
+
+			pad := strings.Repeat(" ", indent)
+			return strings.Replace(text, "\n", "\n"+pad, -1) + "\n"
+		}
+	}
+
+	return ""
+}
+
+func (l *Listener) tmpl(state *consul.State, definitions map[string]consul.Value, instance Instance) (*template.Template, error) {
+	id := instance.Service.ID
+	funcs := template.FuncMap{
+		"ForwardAuth": func(indent int) string { return l.auth(state, instance, indent) },
+	}
+
 	definition := strings.Trim(string(definitions[id]), " \n\t\v")
 	definition = lineStart.ReplaceAllString(definition, "    ")
-	tmpl, err := template.New(id).Delims("[[", "]]").Parse(definition)
+	tmpl, err := template.New(id).Delims("[[", "]]").Funcs(funcs).Parse(definition)
 	if err != nil {
 		return nil, errors.Wrapf(err, "parse template for %s", id)
 	}
