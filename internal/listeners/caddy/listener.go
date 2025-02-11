@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os/exec"
 	"regexp"
@@ -89,7 +90,7 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 	if changedService || changedNode {
 		err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run()
 		if err != nil {
-			return errors.Wrap(err, "exec")
+			slog.Error("failed to exec", "error", err)
 		}
 	}
 
