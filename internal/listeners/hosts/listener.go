@@ -43,6 +43,12 @@ func (l Listener) Notify(ctx context.Context, state *consul.State) error {
 		}
 
 		hosts.add(address, node.Name)
+
+		for _, service := range node.Services {
+			for _, domain := range GetHTTPDomainNames(state, service.Meta) {
+				hosts.add(LocalIP, domain)
+			}
+		}
 	}
 
 	_, err := l.cfg.File.Write(func(file io.Writer) error {

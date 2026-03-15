@@ -172,11 +172,7 @@ func (l *Listener) writeService(
 		for i, id := range slices.Sorted(maps.Keys(definitions)) {
 			var instances []Instance
 			for _, instance := range services[id] {
-				if _, ok := GetDomainName(instance.Service.Meta); !ok {
-					continue
-				}
-
-				if !state.InGroup(instance.Service.Meta, PublishHTTPKey, state.Self) {
+				if len(GetHTTPDomainNames(state, instance.Service.Meta)) == 0 {
 					continue
 				}
 
