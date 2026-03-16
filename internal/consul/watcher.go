@@ -23,6 +23,9 @@ type watcher struct {
 	work   *errgroup.Group
 }
 
+// Watch starts the Consul polling loop and blocks until ctx is cancelled or a fatal error occurs.
+// It subscribes to node, service, and KV changes via blocking queries, debounces updates by 5 s,
+// and calls Notify on every registered listener whenever the state actually changes.
 func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) error {
 	self, err := client.Agent().NodeName()
 	if err != nil {
@@ -298,8 +301,11 @@ func keys(prefix string) WatchFunc[capi.KVPairs] {
 	}
 }
 
+// WatchFunc is a generic adapter over the Consul API blocking-query methods.
 type WatchFunc[V any] func(client *capi.Client, options *capi.QueryOptions) (V, *capi.QueryMeta, error)
 
+// watch returns an iterator that repeatedly issues a blocking query via fn and yields each
+// new value as it arrives. It stops when ctx is cancelled or fn returns an error.
 func watch[V any](ctx context.Context, client *capi.Client, fn WatchFunc[V]) iter.Seq2[V, error] {
 	return func(yield func(V, error) bool) {
 		var none V

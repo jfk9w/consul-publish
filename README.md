@@ -44,11 +44,9 @@ Ownership is tracked through a configurable comment field (default: `consul`). O
 ## Build & install
 
 ```bash
-make bin        # build → bin/consul-publish
-make install    # copy to /usr/local/bin/
-make fmt        # format with goimports
-make test       # run tests
-make clean      # remove bin/
+mise run generate   # run go generate (regenerate mocks, schemas)
+mise run build      # build → bin/consul-publish
+mise run test       # run tests
 ```
 
 ## Usage
