@@ -13,23 +13,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Duration is a time.Duration that marshals to/from MikroTik's HH:MM:SS (or Dd HH:MM:SS) format
-// in JSON and to/from standard Go duration strings in YAML.
+// Duration is a time.Duration that marshals to/from standard Go duration strings (e.g. "5m0s")
+// in both JSON and YAML.
 type Duration time.Duration
 
 func (d Duration) MarshalJSON() ([]byte, error) {
-	total := time.Duration(d)
-	days := int(total.Hours()) / 24
-	hours := int(total.Hours()) % 24
-	minutes := int(total.Minutes()) % 60
-	seconds := int(total.Seconds()) % 60
-	var s string
-	if days > 0 {
-		s = fmt.Sprintf("%dd%02d:%02d:%02d", days, hours, minutes, seconds)
-	} else {
-		s = fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
-	}
-	return json.Marshal(s)
+	return json.Marshal(time.Duration(d).String())
 }
 
 func (d *Duration) UnmarshalJSON(data []byte) error {
@@ -37,21 +26,11 @@ func (d *Duration) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
 	}
-	var days, hours, minutes, seconds int
-	var total time.Duration
-	if n, _ := fmt.Sscanf(s, "%dd%d:%d:%d", &days, &hours, &minutes, &seconds); n == 4 {
-		total = time.Duration(days)*24*time.Hour +
-			time.Duration(hours)*time.Hour +
-			time.Duration(minutes)*time.Minute +
-			time.Duration(seconds)*time.Second
-	} else if n, _ := fmt.Sscanf(s, "%d:%d:%d", &hours, &minutes, &seconds); n == 3 {
-		total = time.Duration(hours)*time.Hour +
-			time.Duration(minutes)*time.Minute +
-			time.Duration(seconds)*time.Second
-	} else {
-		return errors.Errorf("unrecognized MikroTik duration: %s", s)
+	v, err := time.ParseDuration(s)
+	if err != nil {
+		return errors.Wrap(err, "parse duration")
 	}
-	*d = Duration(total)
+	*d = Duration(v)
 	return nil
 }
 

@@ -22,11 +22,11 @@ func TestDuration_MarshalJSON(t *testing.T) {
 		d    mikrotik.Duration
 		want string
 	}{
-		{mikrotik.Duration(5 * time.Minute), `"00:05:00"`},
-		{mikrotik.Duration(1 * time.Hour), `"01:00:00"`},
-		{mikrotik.Duration(90 * time.Second), `"00:01:30"`},
-		{mikrotik.Duration(24 * time.Hour), `"1d00:00:00"`},
-		{mikrotik.Duration(25*time.Hour + 5*time.Minute), `"1d01:05:00"`},
+		{mikrotik.Duration(5 * time.Minute), `"5m0s"`},
+		{mikrotik.Duration(1 * time.Hour), `"1h0m0s"`},
+		{mikrotik.Duration(90 * time.Second), `"1m30s"`},
+		{mikrotik.Duration(24 * time.Hour), `"24h0m0s"`},
+		{mikrotik.Duration(25*time.Hour + 5*time.Minute), `"25h5m0s"`},
 	}
 	for _, tc := range cases {
 		data, err := json.Marshal(tc.d)
@@ -40,11 +40,11 @@ func TestDuration_UnmarshalJSON(t *testing.T) {
 		input string
 		want  mikrotik.Duration
 	}{
-		{`"00:05:00"`, mikrotik.Duration(5 * time.Minute)},
-		{`"01:00:00"`, mikrotik.Duration(1 * time.Hour)},
-		{`"00:01:30"`, mikrotik.Duration(90 * time.Second)},
-		{`"1d00:00:00"`, mikrotik.Duration(24 * time.Hour)},
-		{`"1d01:05:00"`, mikrotik.Duration(25*time.Hour + 5*time.Minute)},
+		{`"5m0s"`, mikrotik.Duration(5 * time.Minute)},
+		{`"1h0m0s"`, mikrotik.Duration(1 * time.Hour)},
+		{`"1m30s"`, mikrotik.Duration(90 * time.Second)},
+		{`"24h0m0s"`, mikrotik.Duration(24 * time.Hour)},
+		{`"25h5m0s"`, mikrotik.Duration(25*time.Hour + 5*time.Minute)},
 	}
 	for _, tc := range cases {
 		var d mikrotik.Duration
@@ -55,7 +55,7 @@ func TestDuration_UnmarshalJSON(t *testing.T) {
 
 func TestDuration_UnmarshalJSON_Invalid(t *testing.T) {
 	var d mikrotik.Duration
-	assert.Error(t, json.Unmarshal([]byte(`"5m"`), &d))
+	assert.Error(t, json.Unmarshal([]byte(`"notaduration"`), &d))
 }
 
 func TestDuration_MarshalYAML(t *testing.T) {
