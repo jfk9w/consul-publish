@@ -1,17 +1,20 @@
+//go:build integration
+
 package mikrotik_test
 
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 
-	"github.com/jfk9w/consul-publish/internal/listeners/mikrotik"
+	"github.com/jfk9w/consul-publish/internal/mikrotik"
 )
 
 const managedByComment = "consul-publish"
 
-func newClient(t *testing.T) *mikrotik.Client {
+func newIntegrationClient(t *testing.T) *mikrotik.Client {
 	t.Helper()
 	host := os.Getenv("MIKROTIK_HOST")
 	user := os.Getenv("MIKROTIK_USER")
@@ -28,7 +31,7 @@ func newClient(t *testing.T) *mikrotik.Client {
 }
 
 func TestCreateDNSRecord(t *testing.T) {
-	c := newClient(t)
+	c := newIntegrationClient(t)
 
 	name := os.Getenv("MIKROTIK_TEST_NAME")
 	address := os.Getenv("MIKROTIK_TEST_ADDRESS")
@@ -39,22 +42,20 @@ func TestCreateDNSRecord(t *testing.T) {
 	record, err := c.CreateDNSRecord(mikrotik.DNSRecord{
 		Name:    name,
 		Address: address,
-		TTL:     "300",
+		TTL:     mikrotik.Duration(5 * time.Minute),
 		Comment: managedByComment,
 	})
 	if err != nil {
 		t.Fatalf("create dns record: %v", err)
 	}
-
 	if record.ID == "" {
 		t.Fatal("expected .id in response")
 	}
-
 	t.Logf("created record: id=%s name=%s address=%s comment=%s", record.ID, record.Name, record.Address, record.Comment)
 }
 
 func TestDeleteDNSRecord(t *testing.T) {
-	c := newClient(t)
+	c := newIntegrationClient(t)
 
 	name := os.Getenv("MIKROTIK_TEST_NAME")
 	address := os.Getenv("MIKROTIK_TEST_ADDRESS")
@@ -74,7 +75,7 @@ func TestDeleteDNSRecord(t *testing.T) {
 		record, err := c.CreateDNSRecord(mikrotik.DNSRecord{
 			Name:    name,
 			Address: address,
-			TTL:     "300",
+			TTL:     mikrotik.Duration(5 * time.Minute),
 			Comment: managedByComment,
 		})
 		if err != nil {
@@ -94,22 +95,19 @@ func TestDeleteDNSRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find after delete: %v", err)
 	}
-
 	if len(remaining) > 0 {
 		t.Fatalf("record still exists after delete: %+v", remaining)
 	}
-
 	t.Log("record deleted successfully")
 }
 
 func TestListManagedDNSRecords(t *testing.T) {
-	c := newClient(t)
+	c := newIntegrationClient(t)
 
 	records, err := c.FindDNSRecords(mikrotik.DNSRecord{Comment: managedByComment})
 	if err != nil {
 		t.Fatalf("find managed dns records: %v", err)
 	}
-
 	t.Logf("found %d managed record(s)", len(records))
 	for _, r := range records {
 		t.Logf("  id=%-6s name=%-30s address=%s", r.ID, r.Name, r.Address)
