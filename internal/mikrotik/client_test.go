@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"gopkg.in/yaml.v3"
 
 	"github.com/jfk9w/consul-publish/internal/mikrotik"
@@ -90,41 +91,45 @@ func TestDuration_UnmarshalYAML(t *testing.T) {
 
 // Client tests
 
-func newTestClient(t *testing.T, handler http.Handler) *mikrotik.Client {
+func newMockClient(t *testing.T, mockHTTP *MockHTTPClient) *mikrotik.Client {
 	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	return mikrotik.New(mikrotik.Config{
-		Host:     srv.Listener.Addr().String(),
-		User:     "admin",
-		Password: "secret",
-	})
+	return mikrotik.New(
+		mikrotik.Config{Host: "router.local", User: "admin", Password: "secret"},
+		mikrotik.WithHTTPClient(mockHTTP),
+	)
 }
 
-func checkBasicAuth(t *testing.T, r *http.Request) {
-	t.Helper()
-	user, pass, ok := r.BasicAuth()
-	require.True(t, ok, "missing basic auth")
-	assert.Equal(t, "admin", user)
-	assert.Equal(t, "secret", pass)
+func makeResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
 }
 
 func TestClient_CreateDNSRecord(t *testing.T) {
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checkBasicAuth(t, r)
-		assert.Equal(t, http.MethodPut, r.Method)
-		assert.Equal(t, "/rest/ip/dns/static", r.URL.Path)
+	ctrl := gomock.NewController(t)
+	mockHTTP := NewMockHTTPClient(ctrl)
 
-		body, _ := io.ReadAll(r.Body)
-		var rec mikrotik.DNSRecord
-		require.NoError(t, json.Unmarshal(body, &rec))
-		assert.Equal(t, "test.local", rec.Name)
-		assert.Equal(t, "10.0.0.1", rec.Address)
+	mockHTTP.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodPut, req.Method)
+			assert.Equal(t, "/rest/ip/dns/static", req.URL.Path)
+			user, pass, ok := req.BasicAuth()
+			require.True(t, ok)
+			assert.Equal(t, "admin", user)
+			assert.Equal(t, "secret", pass)
 
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{".id":"*1","name":"test.local","address":"10.0.0.1","comment":"consul"}`))
-	}))
+			var rec mikrotik.DNSRecord
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&rec))
+			assert.Equal(t, "test.local", rec.Name)
+			assert.Equal(t, "10.0.0.1", rec.Address)
 
+			return makeResponse(http.StatusCreated,
+				`{".id":"*1","name":"test.local","address":"10.0.0.1","comment":"consul"}`), nil
+		})
+
+	c := newMockClient(t, mockHTTP)
 	got, err := c.CreateDNSRecord(mikrotik.DNSRecord{
 		Name:    "test.local",
 		Address: "10.0.0.1",
@@ -136,29 +141,37 @@ func TestClient_CreateDNSRecord(t *testing.T) {
 }
 
 func TestClient_CreateDNSRecord_ErrorStatus(t *testing.T) {
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`bad request`))
-	}))
+	ctrl := gomock.NewController(t)
+	mockHTTP := NewMockHTTPClient(ctrl)
+
+	mockHTTP.EXPECT().
+		Do(gomock.Any()).
+		Return(makeResponse(http.StatusBadRequest, `bad request`), nil)
+
+	c := newMockClient(t, mockHTTP)
 	_, err := c.CreateDNSRecord(mikrotik.DNSRecord{Name: "x"})
 	assert.Error(t, err)
 }
 
 func TestClient_UpdateDNSRecord(t *testing.T) {
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checkBasicAuth(t, r)
-		assert.Equal(t, http.MethodPatch, r.Method)
-		assert.Equal(t, "/rest/ip/dns/static/*1", r.URL.Path)
+	ctrl := gomock.NewController(t)
+	mockHTTP := NewMockHTTPClient(ctrl)
 
-		body, _ := io.ReadAll(r.Body)
-		var rec mikrotik.DNSRecord
-		require.NoError(t, json.Unmarshal(body, &rec))
-		assert.Equal(t, "10.0.0.2", rec.Address)
+	mockHTTP.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodPatch, req.Method)
+			assert.Equal(t, "/rest/ip/dns/static/*1", req.URL.Path)
 
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{".id":"*1","name":"test.local","address":"10.0.0.2","comment":"consul"}`))
-	}))
+			var rec mikrotik.DNSRecord
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&rec))
+			assert.Equal(t, "10.0.0.2", rec.Address)
 
+			return makeResponse(http.StatusOK,
+				`{".id":"*1","name":"test.local","address":"10.0.0.2","comment":"consul"}`), nil
+		})
+
+	c := newMockClient(t, mockHTTP)
 	got, err := c.UpdateDNSRecord(mikrotik.DNSRecord{
 		ID:      "*1",
 		Name:    "test.local",
@@ -170,16 +183,22 @@ func TestClient_UpdateDNSRecord(t *testing.T) {
 }
 
 func TestClient_FindDNSRecords(t *testing.T) {
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checkBasicAuth(t, r)
-		assert.Equal(t, http.MethodGet, r.Method)
-		assert.Equal(t, "/rest/ip/dns/static", r.URL.Path)
-		assert.Equal(t, "consul", r.URL.Query().Get("comment"))
+	ctrl := gomock.NewController(t)
+	mockHTTP := NewMockHTTPClient(ctrl)
 
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[{".id":"*1","name":"a.local","address":"10.0.0.1","comment":"consul"},{".id":"*2","name":"b.local","address":"10.0.0.1","comment":"consul"}]`))
-	}))
+	mockHTTP.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodGet, req.Method)
+			assert.Equal(t, "/rest/ip/dns/static", req.URL.Path)
+			assert.Equal(t, "consul", req.URL.Query().Get("comment"))
 
+			return makeResponse(http.StatusOK,
+				`[{".id":"*1","name":"a.local","address":"10.0.0.1","comment":"consul"},`+
+					`{".id":"*2","name":"b.local","address":"10.0.0.1","comment":"consul"}]`), nil
+		})
+
+	c := newMockClient(t, mockHTTP)
 	records, err := c.FindDNSRecords(mikrotik.DNSRecord{Comment: "consul"})
 	require.NoError(t, err)
 	require.Len(t, records, 2)
@@ -188,30 +207,43 @@ func TestClient_FindDNSRecords(t *testing.T) {
 }
 
 func TestClient_FindDNSRecords_Empty(t *testing.T) {
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
-	}))
+	ctrl := gomock.NewController(t)
+	mockHTTP := NewMockHTTPClient(ctrl)
+
+	mockHTTP.EXPECT().
+		Do(gomock.Any()).
+		Return(makeResponse(http.StatusOK, `[]`), nil)
+
+	c := newMockClient(t, mockHTTP)
 	records, err := c.FindDNSRecords(mikrotik.DNSRecord{Comment: "consul"})
 	require.NoError(t, err)
 	assert.Empty(t, records)
 }
 
 func TestClient_DeleteDNSRecord(t *testing.T) {
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		checkBasicAuth(t, r)
-		assert.Equal(t, http.MethodDelete, r.Method)
-		assert.Equal(t, "/rest/ip/dns/static/*1", r.URL.Path)
-		w.WriteHeader(http.StatusNoContent)
-	}))
+	ctrl := gomock.NewController(t)
+	mockHTTP := NewMockHTTPClient(ctrl)
 
+	mockHTTP.EXPECT().
+		Do(gomock.Any()).
+		DoAndReturn(func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, http.MethodDelete, req.Method)
+			assert.Equal(t, "/rest/ip/dns/static/*1", req.URL.Path)
+			return makeResponse(http.StatusNoContent, ``), nil
+		})
+
+	c := newMockClient(t, mockHTTP)
 	require.NoError(t, c.DeleteDNSRecord("*1"))
 }
 
 func TestClient_DeleteDNSRecord_ErrorStatus(t *testing.T) {
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`not found`))
-	}))
+	ctrl := gomock.NewController(t)
+	mockHTTP := NewMockHTTPClient(ctrl)
+
+	mockHTTP.EXPECT().
+		Do(gomock.Any()).
+		Return(makeResponse(http.StatusNotFound, `not found`), nil)
+
+	c := newMockClient(t, mockHTTP)
 	assert.Error(t, c.DeleteDNSRecord("*999"))
 }

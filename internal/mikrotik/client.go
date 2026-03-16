@@ -73,17 +73,29 @@ type Client struct {
 	baseURL  string
 	user     string
 	password string
-	http     *http.Client
+	http     HTTPClient
+}
+
+// Option is a functional option for Client.
+type Option func(*Client)
+
+// WithHTTPClient overrides the HTTP client used by Client.
+func WithHTTPClient(h HTTPClient) Option {
+	return func(c *Client) { c.http = h }
 }
 
 // New creates a Client that talks to the MikroTik REST API at cfg.Host.
-func New(cfg Config) *Client {
-	return &Client{
+func New(cfg Config, opts ...Option) *Client {
+	c := &Client{
 		baseURL:  "http://" + cfg.Host + "/rest",
 		user:     cfg.User,
 		password: cfg.Password,
-		http:     new(http.Client),
+		http:     http.DefaultClient,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // CreateDNSRecord creates a new static DNS record and returns it with the assigned ID.
