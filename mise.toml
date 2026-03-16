@@ -1,16 +1,16 @@
 [tasks.generate]
 description = "Generate sources"
-run = "go generate {{ config_root }}/..."
+run = "go generate ./..."
 
 [tasks.build]
 description = "Build the binary in bin/ folder"
 depends = ["generate"]
-run = "go build -o {{ config_root }}/bin ./cmd/consul-publish"
+run = "go build -o bin/consul-publish ./cmd/consul-publish"
 
 [tasks.test]
 description = "Run tests"
 depends = ["generate", "build"]
-run = "gotestsum --format=pkgname-and-test-fails -- -v -count=1 -race {{ config_root }}/..."
+run = "gotestsum --format=pkgname-and-test-fails -- -v -count=1 -race ./..."
 
 [tools]
 go = "latest"
