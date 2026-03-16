@@ -1,0 +1,18 @@
+[tasks.generate]
+description = "Generate sources"
+run = "go generate {{ config_root }}/..."
+
+[tasks.build]
+description = "Build the binary in bin/ folder"
+depends = ["generate"]
+run = "go build -o {{ config_root }}/bin ./cmd/consul-publish"
+
+[tasks.test]
+description = "Run tests"
+depends = ["generate", "build"]
+run = "gotestsum --format=pkgname-and-test-fails -- -v -count=1 -race {{ config_root }}/..."
+
+[tools]
+go = "latest"
+"go:github.com/ogen-go/ogen/cmd/ogen" = "v0.76.0"
+"go:gotest.tools/gotestsum" = "latest"
