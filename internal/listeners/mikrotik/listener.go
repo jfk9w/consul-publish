@@ -46,11 +46,9 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 	selfNode := state.Nodes[state.Self]
 
 	desired := make(map[string]string)
-	for _, node := range state.Nodes {
-		for _, service := range node.Services {
-			for _, domain := range listeners.GetDomainNames(service.Meta) {
-				desired[domain] = selfNode.Address
-			}
+	for _, service := range selfNode.Services {
+		for _, domain := range listeners.GetDomainNames(service.Meta) {
+			desired[domain] = selfNode.Address
 		}
 	}
 

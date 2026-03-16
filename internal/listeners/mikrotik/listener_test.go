@@ -155,3 +155,40 @@ func TestListener_Notify_NoServices(t *testing.T) {
 
 	require.NoError(t, l.Notify(context.Background(), stateWithServices("10.0.0.1")))
 }
+
+func TestListener_Notify_IgnoresOtherNodes(t *testing.T) {
+	l, m := newMockListener(t)
+
+	state := &consul.State{
+		Self: "node1",
+		Nodes: map[string]consul.Node{
+			"node1": {
+				ID:      "node1",
+				Name:    "node1",
+				Address: "10.0.0.1",
+				Services: []consul.Service{
+					service("self.local"),
+				},
+			},
+			"node2": {
+				ID:      "node2",
+				Name:    "node2",
+				Address: "10.0.0.2",
+				Services: []consul.Service{
+					service("other.local"),
+				},
+			},
+		},
+	}
+
+	m.EXPECT().FindDNSRecords(mtkapi.DNSRecord{Comment: testComment}).Return(nil, nil)
+	m.EXPECT().CreateDNSRecord(mtkapi.DNSRecord{
+		Name:    "self.local",
+		Address: "10.0.0.1",
+		TTL:     testTTL,
+		Comment: testComment,
+	}).Return(recordOf("*1", "self.local", "10.0.0.1"), nil)
+	// other.local from node2 must NOT be created
+
+	require.NoError(t, l.Notify(context.Background(), state))
+}
