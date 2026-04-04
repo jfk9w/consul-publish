@@ -19,9 +19,7 @@ import (
 	. "github.com/jfk9w/consul-publish/internal/listeners"
 )
 
-var (
-	lineStart = regexp.MustCompile(`(?m)^`)
-)
+var lineStart = regexp.MustCompile(`(?m)^`)
 
 type Config struct {
 	KV      string `yaml:"kv"`
@@ -169,14 +167,17 @@ func (l *Listener) writeService(
 	definitions map[string]consul.Value,
 ) (bool, error) {
 	return l.cfg.Service.Write(func(file io.Writer) error {
-		for i, id := range slices.Sorted(maps.Keys(definitions)) {
+		type entry struct {
+			id        string
+			instances []Instance
+		}
+
+		// Group service entries by domain, preserving sorted order of IDs.
+		domains := make(map[string][]entry)
+		for _, id := range slices.Sorted(maps.Keys(definitions)) {
 			var instances []Instance
 			for _, instance := range services[id] {
-				if _, ok := GetDomainName(instance.Service.Meta); !ok {
-					continue
-				}
-
-				if !state.InGroup(instance.Service.Meta, PublishHTTPKey, state.Self) {
+				if len(GetHTTPDomainNames(state, instance.Service.Meta)) == 0 {
 					continue
 				}
 
@@ -187,13 +188,11 @@ func (l *Listener) writeService(
 				continue
 			}
 
-			tmpl, err := l.tmpl(state, definitions, instances[0])
-			if err != nil {
-				return err
-			}
-
 			domain, _ := GetDomainName(instances[0].Service.Meta)
+			domains[domain] = append(domains[domain], entry{id, instances})
+		}
 
+		for i, domain := range slices.Sorted(maps.Keys(domains)) {
 			if i > 0 {
 				if _, err := fmt.Fprintf(file, "\n"); err != nil {
 					return err
@@ -201,15 +200,22 @@ func (l *Listener) writeService(
 			}
 
 			if _, err := fmt.Fprintf(file, "%s {\n", domain); err != nil {
-				return errors.Wrapf(err, "write start template for %s", id)
+				return errors.Wrapf(err, "write start for %s", domain)
 			}
 
-			if err := tmpl.Execute(file, instances); err != nil {
-				return errors.Wrapf(err, "execute template for %s", id)
+			for _, e := range domains[domain] {
+				tmpl, err := l.tmpl(state, definitions, e.instances[0])
+				if err != nil {
+					return err
+				}
+
+				if err := tmpl.Execute(file, e.instances); err != nil {
+					return errors.Wrapf(err, "execute template for %s", e.id)
+				}
 			}
 
 			if _, err := fmt.Fprintln(file, "\n}"); err != nil {
-				return errors.Wrapf(err, "write end template for %s", id)
+				return errors.Wrapf(err, "write end for %s", domain)
 			}
 		}
 

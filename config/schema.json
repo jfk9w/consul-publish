@@ -1,0 +1,171 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "default": "127.0.0.1:8500",
+      "description": "Consul address",
+      "type": "string"
+    },
+    "caddy": {
+      "additionalProperties": false,
+      "description": "Caddy target settings",
+      "properties": {
+        "auth": {
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Enable caddy target",
+          "type": "boolean"
+        },
+        "exec": {
+          "type": "string"
+        },
+        "kv": {
+          "type": "string"
+        },
+        "node": {
+          "additionalProperties": false,
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "mode",
+            "user",
+            "group"
+          ],
+          "type": "object"
+        },
+        "service": {
+          "additionalProperties": false,
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "mode",
+            "user",
+            "group"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "kv",
+        "exec"
+      ],
+      "type": "object"
+    },
+    "dump": {
+      "additionalProperties": false,
+      "description": "Dump configuration info",
+      "properties": {
+        "schema": {
+          "description": "Dump configuration schema in JSON",
+          "type": "boolean"
+        },
+        "values": {
+          "description": "Dump configuration values in JSON",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "hosts": {
+      "additionalProperties": false,
+      "description": "Hosts target settings",
+      "properties": {
+        "enabled": {
+          "description": "Enable hosts target",
+          "type": "boolean"
+        },
+        "group": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "mode",
+        "user",
+        "group"
+      ],
+      "type": "object"
+    },
+    "mikrotik": {
+      "additionalProperties": false,
+      "description": "MikroTik DNS target settings",
+      "properties": {
+        "comment": {
+          "default": "consul",
+          "description": "Comment used to tag records managed by this listener; only records with this comment are reconciled",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Enable MikroTik DNS target",
+          "type": "boolean"
+        },
+        "host": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "ttl": {
+          "default": "5m0s",
+          "description": "DNS record TTL",
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "user",
+        "password",
+        "ttl",
+        "comment"
+      ],
+      "type": "object"
+    },
+    "token": {
+      "description": "Consul token",
+      "type": "string"
+    }
+  },
+  "required": [
+    "token"
+  ],
+  "type": "object"
+}

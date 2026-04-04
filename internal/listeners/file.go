@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// File describes the target path and ownership settings for an atomically-written file.
 type File struct {
 	Path  string      `yaml:"path"`
 	Mode  os.FileMode `yaml:"mode"`
@@ -21,6 +22,9 @@ type File struct {
 	Group string      `yaml:"group"`
 }
 
+// Write atomically writes content produced by writeFn to f.Path.
+// The write is skipped (returns false) when the SHA-256 of the new content matches
+// the existing file. On success, true is returned and the file is replaced via rename.
 func (f File) Write(writeFn func(file io.Writer) error) (bool, error) {
 	file, err := os.CreateTemp(filepath.Dir(f.Path), ".consul-publish-")
 	if err != nil {

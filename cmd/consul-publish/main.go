@@ -9,6 +9,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/AlekSi/pointer"
 	"github.com/coreos/go-systemd/v22/daemon"
 	capi "github.com/hashicorp/consul/api"
 	"github.com/jfk9w-go/confi"
@@ -16,9 +17,15 @@ import (
 	"github.com/jfk9w/consul-publish/internal/consul"
 	"github.com/jfk9w/consul-publish/internal/listeners/caddy"
 	"github.com/jfk9w/consul-publish/internal/listeners/hosts"
+	"github.com/jfk9w/consul-publish/internal/listeners/mikrotik"
 )
 
 type Config struct {
+	Dump *struct {
+		Schema bool `yaml:"schema,omitempty" doc:"Dump configuration schema in JSON"`
+		Values bool `yaml:"values,omitempty" doc:"Dump configuration values in JSON"`
+	} `yaml:"dump,omitempty" doc:"Dump configuration info"`
+
 	Address string `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
 	Token   string `yaml:"token" doc:"Consul token"`
 
@@ -31,6 +38,11 @@ type Config struct {
 		Enabled      bool `yaml:"enabled,omitempty" doc:"Enable caddy target"`
 		caddy.Config `yaml:",inline"`
 	} `yaml:"caddy,omitempty" doc:"Caddy target settings"`
+
+	Mikrotik struct {
+		Enabled                 bool `yaml:"enabled,omitempty" doc:"Enable MikroTik DNS target"`
+		mikrotik.ListenerConfig `yaml:",inline"`
+	} `yaml:"mikrotik,omitempty" doc:"MikroTik DNS target settings"`
 }
 
 func newConsulClient(address, token string) (*capi.Client, error) {
@@ -76,9 +88,19 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), exit...)
 	defer cancel()
 
-	cfg, _, err := confi.Get[Config](ctx, "consul-publish")
+	cfg, schema, err := confi.Get[Config](ctx, "consul-publish")
 	if err != nil {
 		panic(err)
+	}
+
+	switch {
+	case pointer.Get(cfg.Dump).Schema:
+		dump(schema, confi.JSON)
+		return
+	case pointer.Get(cfg.Dump).Values:
+		cfg.Dump = nil
+		dump(cfg, confi.JSON)
+		return
 	}
 
 	client, err := newConsulClient(cfg.Address, cfg.Token)
@@ -96,6 +118,10 @@ func main() {
 
 	if cfg.Caddy.Enabled {
 		listeners = append(listeners, caddy.New(cfg.Caddy.Config))
+	}
+
+	if cfg.Mikrotik.Enabled {
+		listeners = append(listeners, mikrotik.NewListener(cfg.Mikrotik.ListenerConfig))
 	}
 
 	listeners = append(listeners, new(systemdListener))
@@ -123,5 +149,11 @@ func (l *systemdListener) Notify(ctx context.Context, state *consul.State) error
 func notify(state string) {
 	if _, err := daemon.SdNotify(false, state); err != nil {
 		slog.Warn("failed to notify systemd", "error", err)
+	}
+}
+
+func dump(value any, codec confi.Codec) {
+	if err := codec.Marshal(value, os.Stdout); err != nil {
+		panic(err)
 	}
 }

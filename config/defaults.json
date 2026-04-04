@@ -1,0 +1,11 @@
+{
+  "address": "127.0.0.1:8500",
+  "mikrotik": {
+    "comment": "consul",
+    "host": "",
+    "password": "",
+    "ttl": "5m0s",
+    "user": ""
+  },
+  "token": ""
+}
