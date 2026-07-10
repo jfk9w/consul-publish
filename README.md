@@ -83,6 +83,8 @@ caddy:
   enabled: true
   kv: caddy                # Consul KV prefix that holds service templates
   exec: caddy reload       # command to run after config changes
+  common: |                # Added to every generated Caddy site block
+    header >Alt-Svc `h3=":443"; ma=2592000`
   service:
     path: /etc/caddy/services.conf
     mode: 0644
