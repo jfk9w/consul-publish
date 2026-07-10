@@ -13,6 +13,10 @@
         "auth": {
           "type": "string"
         },
+        "common": {
+          "description": "Common Caddyfile directives added to every generated site block",
+          "type": "string"
+        },
         "enabled": {
           "description": "Enable caddy target",
           "type": "boolean"

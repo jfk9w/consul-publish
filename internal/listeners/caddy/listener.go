@@ -27,6 +27,7 @@ type Config struct {
 	Node    *File  `yaml:"node,omitempty"`
 	Exec    string `yaml:"exec"`
 	Auth    string `yaml:"auth,omitempty"`
+	Common  string `yaml:"common,omitempty" doc:"Common Caddyfile directives added to every generated site block"`
 }
 
 type Listener struct {
@@ -128,8 +129,11 @@ func (l *Listener) writeNode(
 				}
 			}
 
-			if _, err := fmt.Fprintf(file, "%s {", domain); err != nil {
+			if _, err := fmt.Fprintf(file, "%s {\n", domain); err != nil {
 				return err
+			}
+			if err := l.writeCommon(file); err != nil {
+				return errors.Wrapf(err, "write common block for %s", domain)
 			}
 
 			for _, instance := range domains[domain] {
@@ -202,6 +206,9 @@ func (l *Listener) writeService(
 			if _, err := fmt.Fprintf(file, "%s {\n", domain); err != nil {
 				return errors.Wrapf(err, "write start for %s", domain)
 			}
+			if err := l.writeCommon(file); err != nil {
+				return errors.Wrapf(err, "write common block for %s", domain)
+			}
 
 			for _, e := range domains[domain] {
 				tmpl, err := l.tmpl(state, definitions, e.instances[0])
@@ -221,6 +228,17 @@ func (l *Listener) writeService(
 
 		return nil
 	})
+}
+
+func (l *Listener) writeCommon(file io.Writer) error {
+	common := strings.TrimSpace(l.cfg.Common)
+	if common == "" {
+		return nil
+	}
+
+	common = lineStart.ReplaceAllString(common, "    ")
+	_, err := fmt.Fprintln(file, common)
+	return err
 }
 
 func (l *Listener) auth(state *consul.State, instance Instance, indent int) string {
