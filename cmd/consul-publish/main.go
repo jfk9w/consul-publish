@@ -13,10 +13,12 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	capi "github.com/hashicorp/consul/api"
 	"github.com/jfk9w-go/confi"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/jfk9w/consul-publish/internal/consul"
 	"github.com/jfk9w/consul-publish/internal/listeners/caddy"
 	"github.com/jfk9w/consul-publish/internal/listeners/hosts"
+	"github.com/jfk9w/consul-publish/internal/listeners/metrics"
 	"github.com/jfk9w/consul-publish/internal/listeners/mikrotik"
 )
 
@@ -43,6 +45,11 @@ type Config struct {
 		Enabled                 bool `yaml:"enabled,omitempty" doc:"Enable MikroTik DNS target"`
 		mikrotik.ListenerConfig `yaml:",inline"`
 	} `yaml:"mikrotik,omitempty" doc:"MikroTik DNS target settings"`
+
+	Metrics struct {
+		Enabled        bool `yaml:"enabled,omitempty" doc:"Enable Prometheus metrics exporter"`
+		metrics.Config `yaml:",inline"`
+	} `yaml:"metrics,omitempty" doc:"Prometheus metrics exporter settings"`
 }
 
 func newConsulClient(address, token string) (*capi.Client, error) {
@@ -124,9 +131,21 @@ func main() {
 		listeners = append(listeners, mikrotik.NewListener(cfg.Mikrotik.ListenerConfig))
 	}
 
+	var metricsListener *metrics.Listener
+	if cfg.Metrics.Enabled {
+		metricsListener = metrics.New(cfg.Metrics.Config)
+		listeners = append(listeners, metricsListener)
+	}
+
 	listeners = append(listeners, new(systemdListener))
 
-	if err := consul.Watch(ctx, client, listeners...); err != nil {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error { return consul.Watch(ctx, client, listeners...) })
+	if metricsListener != nil {
+		eg.Go(func() error { return metricsListener.ListenAndServe(ctx) })
+	}
+
+	if err := eg.Wait(); err != nil {
 		panic(err)
 	}
 

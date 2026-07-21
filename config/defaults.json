@@ -1,5 +1,9 @@
 {
   "address": "127.0.0.1:8500",
+  "metrics": {
+    "listen": "0.0.0.0:9634",
+    "path": "/metrics"
+  },
   "mikrotik": {
     "comment": "consul",
     "host": "",
