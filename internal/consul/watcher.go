@@ -112,14 +112,22 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 
 				slog.Info("notifying listeners")
 				for _, listener := range listeners {
+					name := reflect.TypeOf(listener).String()
+					log := slog.With("listener", name)
+					log.Debug("notifying listener")
+
 					var state State
 					if err := deepcopy.Copy(&state, w.state); err != nil {
+						log.Error("failed to copy state for listener", "error", err)
 						return err
 					}
 
 					if err := listener.Notify(ctx, &state); err != nil {
+						log.Error("listener notification failed", "error", err)
 						return err
 					}
+
+					log.Debug("listener notified")
 				}
 
 				return nil
