@@ -1,6 +1,6 @@
 # consul-publish
 
-A Go daemon that watches HashiCorp Consul for service and node changes and synchronises this information to multiple targets: the system hosts file, a Caddy reverse-proxy configuration, and MikroTik static DNS records.
+A Go daemon that watches HashiCorp Consul for service and node changes, synchronises this information to multiple targets, and exposes local node group membership as Prometheus metrics.
 
 ## How it works
 
@@ -32,6 +32,17 @@ Manages static DNS records in a MikroTik router via its REST API. On every state
 - Duplicate records for the same domain are pruned, keeping the one with the correct address.
 
 Ownership is tracked through a configurable comment field (default: `consul`). Only records carrying that comment are ever touched.
+
+### Prometheus metrics
+
+The built-in HTTP exporter publishes only the local node's Consul metadata groups. For example, `groups = "home mariadb"` produces:
+
+```text
+consul_publish_host_group_info{host_group="home"} 1
+consul_publish_host_group_info{host_group="mariadb"} 1
+```
+
+The exporter also publishes `consul_publish_consul_state_ready` and `consul_publish_last_update_timestamp_seconds`. It intentionally omits host, country, job, and instance labels; Prometheus adds target labels during scraping.
 
 ## Service metadata keys
 
@@ -103,6 +114,29 @@ mikrotik:
   password: "<password>"
   ttl: 5m                  # DNS record TTL
   comment: consul          # ownership tag — only records with this comment are managed
+
+metrics:
+  enabled: true
+  listen: 0.0.0.0:9634
+  path: /metrics
 ```
+
+One possible Consul service registration for Prometheus Consul service discovery is:
+
+```hcl
+services {
+  name    = "consul-publish"
+  address = "<node-address>"
+  port    = 9634
+
+  tags = ["prom"]
+
+  meta {
+    metrics-path = "/metrics"
+  }
+}
+```
+
+This matches the existing infrastructure convention: the `prom` service tag and the `metrics-path` Consul metadata key (exposed to Prometheus relabelling as `__meta_consul_service_metadata_metrics_path`). Adjust the address to the node interface reachable by Prometheus.
 
 The full JSON Schema is available at [`config/schema.json`](config/schema.json).

@@ -126,6 +126,31 @@
       ],
       "type": "object"
     },
+    "metrics": {
+      "additionalProperties": false,
+      "description": "Prometheus metrics exporter settings",
+      "properties": {
+        "enabled": {
+          "description": "Enable Prometheus metrics exporter",
+          "type": "boolean"
+        },
+        "listen": {
+          "default": "0.0.0.0:9634",
+          "description": "Prometheus metrics listen address",
+          "type": "string"
+        },
+        "path": {
+          "default": "/metrics",
+          "description": "Prometheus metrics HTTP path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "listen",
+        "path"
+      ],
+      "type": "object"
+    },
     "mikrotik": {
       "additionalProperties": false,
       "description": "MikroTik DNS target settings",
