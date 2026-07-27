@@ -52,10 +52,13 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 		return errors.Errorf("%s is not a folder", l.cfg.KV)
 	}
 
+	log := slog.With("listener", "caddy", "self", state.Self)
 	self := state.Nodes[state.Self]
 	services := make(map[string][]Instance)
+	instanceCount := 0
 	for _, node := range state.Nodes {
 		for _, service := range node.Services {
+			instanceCount++
 			service.Address = GetLocalAddress(self, service)
 			services[service.ID] = append(services[service.ID], Instance{
 				Node:    node,
@@ -69,6 +72,12 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 			return instances[i].Service.Address < instances[j].Service.Address
 		})
 	}
+	log.Debug("rendering caddy configuration",
+		"nodes", len(state.Nodes),
+		"service_ids", len(services),
+		"instances", instanceCount,
+		"definitions", len(definitions),
+	)
 
 	var changedService bool
 	if l.cfg.Service != nil {
@@ -86,11 +95,19 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 		}
 	}
 
+	log.Debug("rendered caddy configuration",
+		"service_changed", changedService,
+		"node_changed", changedNode,
+	)
+
 	if changedService || changedNode {
+		log.Info("caddy configuration changed, reloading")
 		err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run()
 		if err != nil {
-			slog.Error("failed to exec", "error", err)
+			log.Error("failed to reload caddy", "error", err)
+			return errors.Wrap(err, "reload caddy")
 		}
+		log.Info("caddy reloaded")
 	}
 
 	return nil
@@ -241,9 +258,9 @@ func (l *Listener) writeCommon(file io.Writer) error {
 	return err
 }
 
-func (l *Listener) auth(state *consul.State, instance Instance, indent int) string {
+func (l *Listener) auth(state *consul.State, instance Instance, indent int) (string, error) {
 	if l.cfg.Auth == "" {
-		return ""
+		return "", nil
 	}
 
 	for _, service := range instance.Node.Services {
@@ -255,17 +272,23 @@ func (l *Listener) auth(state *consul.State, instance Instance, indent int) stri
 }`, address, service.Port)
 
 			pad := strings.Repeat(" ", indent)
-			return strings.Replace(text, "\n", "\n"+pad, -1) + "\n"
+			return strings.Replace(text, "\n", "\n"+pad, -1) + "\n", nil
 		}
 	}
 
-	return ""
+	return "", errors.Errorf(
+		"forward auth service %q not found on node %q while rendering service %q (available services: %s)",
+		l.cfg.Auth,
+		instance.Node.Name,
+		instance.Service.ID,
+		strings.Join(serviceIDs(instance.Node.Services), ", "),
+	)
 }
 
 func (l *Listener) tmpl(state *consul.State, definitions map[string]consul.Value, instance Instance) (*template.Template, error) {
 	id := instance.Service.ID
 	funcs := template.FuncMap{
-		"ForwardAuth": func(indent int) string { return l.auth(state, instance, indent) },
+		"ForwardAuth": func(indent int) (string, error) { return l.auth(state, instance, indent) },
 	}
 
 	definition := strings.Trim(string(definitions[id]), " \n\t\v")
@@ -281,4 +304,14 @@ func (l *Listener) tmpl(state *consul.State, definitions map[string]consul.Value
 type Instance struct {
 	Node    consul.Node
 	Service consul.Service
+}
+
+func serviceIDs(services []consul.Service) []string {
+	ids := make([]string, 0, len(services))
+	for _, service := range services {
+		ids = append(ids, service.ID)
+	}
+
+	slices.Sort(ids)
+	return ids
 }

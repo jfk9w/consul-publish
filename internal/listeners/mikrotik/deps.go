@@ -2,7 +2,7 @@ package mikrotik
 
 import mtkapi "github.com/jfk9w/consul-publish/internal/mikrotik"
 
-//go:generate mockgen -destination mocks.go -package mikrotik -typed . DNSClient
+//go:generate mockgen -destination mocks_test.go -package mikrotik -typed . DNSClient
 
 // DNSClient is the interface the listener uses to manage MikroTik DNS records.
 // mtkapi.Client satisfies this interface.

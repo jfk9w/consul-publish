@@ -1,15 +1,29 @@
 [tasks.generate]
 description = "Generate sources"
+sources = ["**/deps.go"]
+outputs = { auto = true }
 run = "go generate ./..."
 
 [tasks.build]
 description = "Build the binary in bin/ folder"
-depends = ["generate"]
+sources = [
+    "go.mod",
+    "go.sum",
+    "**/*.go",
+    "!**/*_test.go",
+]
+outputs = ["bin/consul-publish"]
 run = "go build -o bin/consul-publish ./cmd/consul-publish"
 
 [tasks.test]
 description = "Run tests"
-depends = ["generate", "build"]
+depends = ["generate"]
+sources = [
+    "go.mod",
+    "go.sum",
+    "**/*.go",
+]
+outputs = { auto = true }
 run = "gotestsum --format=pkgname-and-test-fails -- -v -count=1 -race ./..."
 
 [tools]
