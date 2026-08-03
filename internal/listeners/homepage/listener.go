@@ -83,6 +83,9 @@ func (l *Listener) write(state *consul.State, file io.Writer, definitions map[st
 			if _, ok := definitions[service.ID]; !ok {
 				continue
 			}
+			if !state.InGroup(service.Meta, PublishHomepageKey, state.Self) {
+				continue
+			}
 
 			service.Address = GetLocalAddress(self, service)
 			services[service.ID] = append(services[service.ID], Instance{Node: node, Service: service})
