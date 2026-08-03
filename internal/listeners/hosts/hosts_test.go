@@ -41,6 +41,9 @@ func TestBuildHostsAddsOnlyAliasesUniqueToOneNode(t *testing.T) {
 				ID:      "mars-id",
 				Name:    "mars",
 				Address: "10.0.0.1",
+				Meta: map[string]string{
+					"domain-name": "mars.sonc.top http://127.0.0.1:9001",
+				},
 				Services: []consul.Service{
 					{ID: "loki"},
 					{ID: "loki"},
@@ -55,11 +58,18 @@ func TestBuildHostsAddsOnlyAliasesUniqueToOneNode(t *testing.T) {
 				ID:      "venus-id",
 				Name:    "venus",
 				Address: "10.0.0.2",
+				Meta: map[string]string{
+					"domain-name": "venus.sonc.top",
+				},
 				Services: []consul.Service{
 					{ID: "alloy"},
 					{ID: "metrics", Meta: map[string]string{
 						"domain-name":  "shared.example.com",
-						"publish-http": "all",
+						"publish-http": "venus",
+					}},
+					{ID: "traces", Meta: map[string]string{
+						"domain-name":  "traces.example.com",
+						"publish-http": "venus",
 					}},
 				},
 			},
@@ -67,8 +77,8 @@ func TestBuildHostsAddsOnlyAliasesUniqueToOneNode(t *testing.T) {
 	}
 
 	require.Equal(t, []hostEntry{
-		{address: "10.0.0.2", names: []string{"venus", "metrics"}},
-		{address: "127.0.0.1", names: []string{"mars", "alloy", "logs", "loki", "loki-alt.example.com", "loki.example.com", "shared.example.com"}},
+		{address: "10.0.0.2", names: []string{"venus", "metrics", "traces", "traces.example.com", "venus.sonc.top"}},
+		{address: "127.0.0.1", names: []string{"mars", "alloy", "logs", "loki", "loki-alt.example.com", "loki.example.com", "mars.sonc.top", "shared.example.com"}},
 	}, collectHosts(buildHosts(state)))
 }
 

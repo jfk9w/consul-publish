@@ -79,6 +79,7 @@ func buildHosts(state *consul.State) hosts {
 
 func nodeAliases(state *consul.State, node consul.Node) lib.Set[string] {
 	aliases := make(lib.Set[string])
+	aliases.Add(domainAliases(GetDomainNames(node.Meta))...)
 	for _, service := range node.Services {
 		if service.ID != "" {
 			aliases.Add(service.ID)
@@ -92,9 +93,12 @@ func nodeAliases(state *consul.State, node consul.Node) lib.Set[string] {
 func uniqueAliases(state *consul.State) map[string]lib.Set[string] {
 	owners := make(map[string]lib.Set[string])
 	for _, node := range state.Nodes {
+		for _, domain := range domainAliases(GetDomainNames(node.Meta)) {
+			addOwner(owners, domain, node.ID)
+		}
 		for _, service := range node.Services {
 			addOwner(owners, service.ID, node.ID)
-			for _, domain := range getHTTPDomainAliases(state, service.Meta) {
+			for _, domain := range domainAliases(GetDomainNames(service.Meta)) {
 				addOwner(owners, domain, node.ID)
 			}
 		}
@@ -118,7 +122,10 @@ func uniqueAliases(state *consul.State) map[string]lib.Set[string] {
 }
 
 func getHTTPDomainAliases(state *consul.State, meta map[string]string) []string {
-	domains := GetHTTPDomainNames(state, meta)
+	return domainAliases(GetHTTPDomainNames(state, meta))
+}
+
+func domainAliases(domains []string) []string {
 	aliases := make([]string, 0, len(domains))
 	for _, domain := range domains {
 		parsed, err := url.Parse("//" + domain)
