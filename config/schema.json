@@ -97,6 +97,45 @@
       },
       "type": "object"
     },
+    "homepage": {
+      "additionalProperties": false,
+      "description": "Homepage target settings",
+      "properties": {
+        "enabled": {
+          "description": "Enable Homepage target",
+          "type": "boolean"
+        },
+        "exec": {
+          "description": "Command to run after the Homepage configuration changes",
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "kv": {
+          "description": "Consul KV prefix that holds Homepage service templates",
+          "type": "string"
+        },
+        "mode": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kv",
+        "exec",
+        "path",
+        "mode",
+        "user",
+        "group"
+      ],
+      "type": "object"
+    },
     "hosts": {
       "additionalProperties": false,
       "description": "Hosts target settings",

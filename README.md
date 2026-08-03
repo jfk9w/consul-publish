@@ -25,6 +25,10 @@ Writes `/etc/hosts` (or a custom path) based on the current Consul node and serv
 
 Generates a Caddy reverse-proxy configuration from service definitions stored in Consul KV. Each KV value is a Go template rendered with `[[` / `]]` delimiters. The `ForwardAuth` template function adds Authelia-compatible forward-auth blocks. After a write, an optional shell command (e.g. `caddy reload`) is executed.
 
+### Homepage
+
+Generates Homepage's `services.yaml` from service templates stored in Consul KV. A service is included when its `homepage-group` metadata contains one or more whitespace-separated placements in the form `<group>/<service-name>`. The KV key is the Consul service ID; its value is a Go template rendered with `[[` / `]]` delimiters and the service instances as its data. After the file changes, an optional shell command is executed to reload Homepage.
+
 ### MikroTik
 
 Manages static DNS records in a MikroTik router via its REST API. On every state change the listener reconciles the desired set of records (derived from services that have a `domain-name` metadata key) with the records already present in MikroTik:
@@ -52,6 +56,7 @@ The exporter also publishes `consul_publish_consul_state_ready` and `consul_publ
 | Key | Used by | Description |
 |-----|---------|-------------|
 | `domain-name` | hosts, mikrotik | Space-separated list of DNS names for the service. `http://` / `https://` prefixes are stripped automatically. |
+| `homepage-group` | homepage | Space-separated placements in the form `<group>/<service-name>`; omit to hide the service from Homepage. |
 | `publish-http` | hosts, caddy | Group selector — the service is published only when the local node is a member of the named group. |
 | `publish-path` | caddy | URL path prefix for the service. |
 
@@ -109,6 +114,23 @@ caddy:
     mode: 0644
     user: root
     group: root
+
+homepage:
+  enabled: true
+  kv: homepage             # Consul KV prefix; each key is a service ID
+  exec: docker kill --signal SIGHUP homepage
+  path: /app/config/services.yaml
+  mode: 0644
+  user: root
+  group: root
+
+# Consul KV homepage/grafana:
+# href: https://grafana.example.com
+# widget:
+#   type: grafana
+
+# Consul service metadata:
+# homepage-group: "Monitoring/Grafana Home/Grafana"
 
 mikrotik:
   enabled: true

@@ -17,6 +17,7 @@ import (
 
 	"github.com/jfk9w/consul-publish/internal/consul"
 	"github.com/jfk9w/consul-publish/internal/listeners/caddy"
+	"github.com/jfk9w/consul-publish/internal/listeners/homepage"
 	"github.com/jfk9w/consul-publish/internal/listeners/hosts"
 	"github.com/jfk9w/consul-publish/internal/listeners/metrics"
 	"github.com/jfk9w/consul-publish/internal/listeners/mikrotik"
@@ -40,6 +41,11 @@ type Config struct {
 		Enabled      bool `yaml:"enabled,omitempty" doc:"Enable caddy target"`
 		caddy.Config `yaml:",inline"`
 	} `yaml:"caddy,omitempty" doc:"Caddy target settings"`
+
+	Homepage struct {
+		Enabled         bool `yaml:"enabled,omitempty" doc:"Enable Homepage target"`
+		homepage.Config `yaml:",inline"`
+	} `yaml:"homepage,omitempty" doc:"Homepage target settings"`
 
 	Mikrotik struct {
 		Enabled                 bool `yaml:"enabled,omitempty" doc:"Enable MikroTik DNS target"`
@@ -125,6 +131,10 @@ func main() {
 
 	if cfg.Caddy.Enabled {
 		listeners = append(listeners, caddy.New(cfg.Caddy.Config))
+	}
+
+	if cfg.Homepage.Enabled {
+		listeners = append(listeners, homepage.New(cfg.Homepage.Config))
 	}
 
 	if cfg.Mikrotik.Enabled {
