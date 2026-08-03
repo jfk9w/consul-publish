@@ -50,7 +50,7 @@ func (l Listener) Notify(ctx context.Context, state *consul.State) error {
 			}
 		}
 
-		hosts.add(address, node.Name)
+		hosts.addCanonical(address, node.Name)
 
 		for _, service := range node.Services {
 			for _, domain := range GetHTTPDomainNames(state, service.Meta) {
