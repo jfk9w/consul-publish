@@ -39,8 +39,8 @@ func (l Listener) KV() []string {
 
 // Notify regenerates the hosts file from the current Consul state.
 // Each node is mapped to its IP address; the local node is mapped to 127.0.0.1.
-// Service IDs and published domain names are added as aliases when they occur on
-// exactly one node. The local node gets all of its aliases regardless of uniqueness.
+// Domain names are added as aliases when they occur on exactly one node. The local
+// node gets all of its published domain names regardless of uniqueness.
 func (l Listener) Notify(ctx context.Context, state *consul.State) error {
 	hosts := buildHosts(state)
 
@@ -81,9 +81,6 @@ func nodeAliases(state *consul.State, node consul.Node) lib.Set[string] {
 	aliases := make(lib.Set[string])
 	aliases.Add(domainAliases(GetDomainNames(node.Meta))...)
 	for _, service := range node.Services {
-		if service.ID != "" {
-			aliases.Add(service.ID)
-		}
 		aliases.Add(getHTTPDomainAliases(state, service.Meta)...)
 	}
 
@@ -97,7 +94,6 @@ func uniqueAliases(state *consul.State) map[string]lib.Set[string] {
 			addOwner(owners, domain, node.ID)
 		}
 		for _, service := range node.Services {
-			addOwner(owners, service.ID, node.ID)
 			for _, domain := range domainAliases(GetDomainNames(service.Meta)) {
 				addOwner(owners, domain, node.ID)
 			}

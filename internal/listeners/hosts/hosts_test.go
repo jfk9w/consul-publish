@@ -77,8 +77,8 @@ func TestBuildHostsAddsOnlyAliasesUniqueToOneNode(t *testing.T) {
 	}
 
 	require.Equal(t, []hostEntry{
-		{address: "10.0.0.2", names: []string{"venus", "metrics", "traces", "traces.example.com", "venus.sonc.top"}},
-		{address: "127.0.0.1", names: []string{"mars", "alloy", "logs", "loki", "loki-alt.example.com", "loki.example.com", "mars.sonc.top", "shared.example.com"}},
+		{address: "10.0.0.2", names: []string{"venus", "traces.example.com", "venus.sonc.top"}},
+		{address: "127.0.0.1", names: []string{"mars", "loki-alt.example.com", "loki.example.com", "mars.sonc.top", "shared.example.com"}},
 	}, collectHosts(buildHosts(state)))
 }
 
