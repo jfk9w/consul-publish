@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/jfk9w/consul-publish/internal/consul"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +31,45 @@ func TestIterSortsAddresses(t *testing.T) {
 		{address: "10.0.0.1", names: []string{"server-a", "alias"}},
 		{address: "10.0.0.2", names: []string{"server-b"}},
 	}, collectHosts(hosts))
+}
+
+func TestBuildHostsAddsOnlyAliasesUniqueToOneNode(t *testing.T) {
+	state := &consul.State{
+		Self: "mars",
+		Nodes: map[string]consul.Node{
+			"mars": {
+				ID:      "mars-id",
+				Name:    "mars",
+				Address: "10.0.0.1",
+				Services: []consul.Service{
+					{ID: "loki"},
+					{ID: "loki"},
+					{ID: "alloy"},
+					{ID: "logs", Meta: map[string]string{
+						"domain-name":  "loki.example.com shared.example.com http://127.0.0.1:9001 https://loki-alt.example.com:9001",
+						"publish-http": "all",
+					}},
+				},
+			},
+			"venus": {
+				ID:      "venus-id",
+				Name:    "venus",
+				Address: "10.0.0.2",
+				Services: []consul.Service{
+					{ID: "alloy"},
+					{ID: "metrics", Meta: map[string]string{
+						"domain-name":  "shared.example.com",
+						"publish-http": "all",
+					}},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, []hostEntry{
+		{address: "10.0.0.2", names: []string{"venus", "metrics"}},
+		{address: "127.0.0.1", names: []string{"mars", "alloy", "logs", "loki", "loki-alt.example.com", "loki.example.com", "shared.example.com"}},
+	}, collectHosts(buildHosts(state)))
 }
 
 type hostEntry struct {
