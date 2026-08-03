@@ -32,7 +32,7 @@ func TestNotifyReloadsOnlyAfterChange(t *testing.T) {
 	listener := New(Config{
 		KV:   "homepage",
 		Exec: fmt.Sprintf("touch %q", marker),
-		File: listeners.File{
+		Services: listeners.File{
 			Path:  filepath.Join(dir, "services.yaml"),
 			Mode:  0o644,
 			User:  currentUser.Username,
@@ -42,7 +42,7 @@ func TestNotifyReloadsOnlyAfterChange(t *testing.T) {
 	state := &consul.State{
 		Nodes: map[string]consul.Node{
 			"node": {Name: "node", Services: []consul.Service{{ID: "app", Meta: map[string]string{
-				listeners.HomepageGroupKey:   "Apps/App",
+				listeners.HomepagePathKey:    "Apps/App",
 				listeners.PublishHomepageKey: "all",
 			}}}},
 		},
@@ -80,7 +80,7 @@ func TestWrite(t *testing.T) {
 				Services: []consul.Service{{
 					ID: "grafana", Name: "grafana", Address: "10.0.0.2", Port: 3000,
 					Meta: map[string]string{
-						listeners.HomepageGroupKey:   "Monitoring/Grafana Home/Grafana",
+						listeners.HomepagePathKey:    "Monitoring/Grafana Home/Grafana",
 						listeners.PublishHomepageKey: "all",
 					},
 				}},
@@ -91,12 +91,12 @@ func TestWrite(t *testing.T) {
 					{
 						ID: "grafana", Name: "grafana", Address: "10.0.0.3", Port: 3000,
 						Meta: map[string]string{
-							listeners.HomepageGroupKey:   "Monitoring/Grafana",
+							listeners.HomepagePathKey:    "Monitoring/Grafana",
 							listeners.PublishHomepageKey: "all",
 						},
 					},
 					{ID: "hidden", Meta: map[string]string{
-						listeners.HomepageGroupKey:   "Home/Hidden",
+						listeners.HomepagePathKey:    "Home/Hidden",
 						listeners.PublishHomepageKey: "other",
 					}},
 				},
@@ -145,7 +145,7 @@ func TestWriteUsesLocalAddress(t *testing.T) {
 				Services: []consul.Service{{
 					ID: "app", Address: "10.0.0.1", Port: 8080,
 					Meta: map[string]string{
-						listeners.HomepageGroupKey:   "Apps/App",
+						listeners.HomepagePathKey:    "Apps/App",
 						listeners.PublishHomepageKey: "all",
 					},
 				}},
@@ -170,7 +170,7 @@ func TestWriteRejectsInvalidGroup(t *testing.T) {
 
 	state := &consul.State{Self: "node", Nodes: map[string]consul.Node{
 		"node": {Name: "node", Services: []consul.Service{{ID: "app", Meta: map[string]string{
-			listeners.HomepageGroupKey:   "invalid",
+			listeners.HomepagePathKey:    "invalid",
 			listeners.PublishHomepageKey: "all",
 		}}}},
 	}}
@@ -186,7 +186,7 @@ func TestWriteTemplateError(t *testing.T) {
 
 	state := &consul.State{Self: "node", Nodes: map[string]consul.Node{
 		"node": {Name: "node", Services: []consul.Service{{ID: "app", Meta: map[string]string{
-			listeners.HomepageGroupKey:   "Apps/App",
+			listeners.HomepagePathKey:    "Apps/App",
 			listeners.PublishHomepageKey: "all",
 		}}}},
 	}}

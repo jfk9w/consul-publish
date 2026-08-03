@@ -21,9 +21,9 @@ import (
 )
 
 type Config struct {
-	KV   string `yaml:"kv" doc:"Consul KV prefix that holds Homepage service templates"`
-	Exec string `yaml:"exec" doc:"Command to run after the Homepage configuration changes"`
-	File `yaml:",inline"`
+	KV       string `yaml:"kv" doc:"Consul KV prefix that holds Homepage service templates"`
+	Exec     string `yaml:"exec" doc:"Command to run after the Homepage configuration changes"`
+	Services File   `yaml:"services" doc:"Homepage services.yaml output file settings"`
 }
 
 type Listener struct {
@@ -44,7 +44,7 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 		return errors.Errorf("%s is not a folder", l.cfg.KV)
 	}
 
-	changed, err := l.cfg.File.Write(func(file io.Writer) error {
+	changed, err := l.cfg.Services.Write(func(file io.Writer) error {
 		return l.write(state, file, maps.Collect(definitions.Values()))
 	})
 	if err != nil {
@@ -106,10 +106,10 @@ func (l *Listener) write(state *consul.State, file io.Writer, definitions map[st
 	for _, id := range slices.Sorted(maps.Keys(services)) {
 		instances := services[id]
 		for _, instance := range instances {
-			for _, value := range strings.Fields(instance.Service.Meta[HomepageGroupKey]) {
+			for _, value := range strings.Fields(instance.Service.Meta[HomepagePathKey]) {
 				group, name, ok := strings.Cut(value, "/")
 				if !ok || group == "" || name == "" {
-					return errors.Errorf("invalid %s value %q for service %s: expected group/service-name", HomepageGroupKey, value, id)
+					return errors.Errorf("invalid %s value %q for service %s: expected group/service-name", HomepagePathKey, value, id)
 				}
 
 				key := group + "\x00" + name + "\x00" + id

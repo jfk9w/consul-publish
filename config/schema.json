@@ -109,30 +109,40 @@
           "description": "Command to run after the Homepage configuration changes",
           "type": "string"
         },
-        "group": {
-          "type": "string"
-        },
         "kv": {
           "description": "Consul KV prefix that holds Homepage service templates",
           "type": "string"
         },
-        "mode": {
-          "type": "integer"
-        },
-        "path": {
-          "type": "string"
-        },
-        "user": {
-          "type": "string"
+        "services": {
+          "additionalProperties": false,
+          "description": "Homepage services.yaml output file settings",
+          "properties": {
+            "group": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "integer"
+            },
+            "path": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "mode",
+            "user",
+            "group"
+          ],
+          "type": "object"
         }
       },
       "required": [
         "kv",
         "exec",
-        "path",
-        "mode",
-        "user",
-        "group"
+        "services"
       ],
       "type": "object"
     },
