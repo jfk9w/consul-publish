@@ -16,7 +16,10 @@ Writes `/etc/hosts` (or a custom path) based on the current Consul node and serv
 
 - Each node is mapped to its IP address.
 - The local node is mapped to `127.0.0.1`.
-- Services that carry a `domain-name` metadata key and are published via `publish-http` get an additional `127.0.0.1` entry for each domain name.
+- Unique `domain-name` values from node metadata are added as aliases of their nodes.
+- Service `domain-name` values are added as aliases when each domain occurs on exactly one node; remote aliases do not depend on whether the local node matches `publish-http`.
+- For the local node, all published domain names are added to `127.0.0.1` regardless of uniqueness.
+- IP addresses in `domain-name` are not written as aliases; ports are stripped from domain aliases.
 
 ### Caddy
 
