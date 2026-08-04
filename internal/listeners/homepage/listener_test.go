@@ -80,7 +80,7 @@ func TestWrite(t *testing.T) {
 				Services: []consul.Service{{
 					ID: "grafana", Name: "grafana", Address: "10.0.0.2", Port: 3000,
 					Meta: map[string]string{
-						listeners.HomepagePathKey:    "Monitoring/Grafana Home/Grafana",
+						listeners.HomepagePathKey:    " Home / Grafana ",
 						listeners.PublishHomepageKey: "all",
 					},
 				}},
@@ -162,6 +162,32 @@ func TestWriteUsesLocalAddress(t *testing.T) {
 	}
 	if !strings.Contains(got.String(), "http://127.0.0.1:8080") {
 		t.Errorf("write() = %q, want local address", got.String())
+	}
+}
+
+func TestWriteAllowsSpacesInPathElements(t *testing.T) {
+	t.Parallel()
+
+	state := &consul.State{Self: "node", Nodes: map[string]consul.Node{
+		"node": {Name: "node", Services: []consul.Service{{ID: "home-assistant", Meta: map[string]string{
+			listeners.HomepagePathKey:    " Дом / Home Assistant ",
+			listeners.PublishHomepageKey: "all",
+		}}}},
+	}}
+
+	var got bytes.Buffer
+	err := New(Config{}).write(state, &got, map[string]consul.Value{
+		"home-assistant": []byte("href: /"),
+	})
+	if err != nil {
+		t.Fatalf("write() error = %v", err)
+	}
+
+	want := "- Дом:\n" +
+		"    - Home Assistant:\n" +
+		"        href: /\n"
+	if got.String() != want {
+		t.Errorf("write() = %q, want %q", got.String(), want)
 	}
 }
 

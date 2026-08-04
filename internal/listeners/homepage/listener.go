@@ -106,19 +106,20 @@ func (l *Listener) write(state *consul.State, file io.Writer, definitions map[st
 	for _, id := range slices.Sorted(maps.Keys(services)) {
 		instances := services[id]
 		for _, instance := range instances {
-			for _, value := range strings.Fields(instance.Service.Meta[HomepagePathKey]) {
-				group, name, ok := strings.Cut(value, "/")
-				if !ok || group == "" || name == "" {
-					return errors.Errorf("invalid %s value %q for service %s: expected group/service-name", HomepagePathKey, value, id)
-				}
-
-				key := group + "\x00" + name + "\x00" + id
-				if _, ok := seen[key]; ok {
-					continue
-				}
-				seen[key] = struct{}{}
-				groups[group] = append(groups[group], placement{name: name, serviceID: id, instances: instances})
+			value := instance.Service.Meta[HomepagePathKey]
+			group, name, ok := strings.Cut(value, "/")
+			group = strings.TrimSpace(group)
+			name = strings.TrimSpace(name)
+			if !ok || group == "" || name == "" {
+				return errors.Errorf("invalid %s value %q for service %s: expected group/service-name", HomepagePathKey, value, id)
 			}
+
+			key := group + "\x00" + name + "\x00" + id
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			groups[group] = append(groups[group], placement{name: name, serviceID: id, instances: instances})
 		}
 	}
 

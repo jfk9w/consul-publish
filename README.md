@@ -27,7 +27,7 @@ Generates a Caddy reverse-proxy configuration from service definitions stored in
 
 ### Homepage
 
-Generates Homepage's `services.yaml` from service templates stored in Consul KV. A service is included when the local node belongs to one of the groups selected by `publish-homepage` and its `homepage-path` metadata contains one or more whitespace-separated placements in the form `<group>/<service-name>`. The KV key is the Consul service ID; its value is a Go template rendered with `[[` / `]]` delimiters and the service instances as its data. After the file changes, an optional shell command is executed to reload Homepage.
+Generates Homepage's `services.yaml` from service templates stored in Consul KV. A service is included when the local node belongs to one of the groups selected by `publish-homepage` and its `homepage-path` metadata contains a placement in the form `<group>/<service-name>`. Spaces are allowed inside both path elements, and surrounding spaces are ignored. The KV key is the Consul service ID; its value is a Go template rendered with `[[` / `]]` delimiters and the service instances as its data. After the file changes, an optional shell command is executed to reload Homepage.
 
 ### MikroTik
 
@@ -56,7 +56,7 @@ The exporter also publishes `consul_publish_consul_state_ready` and `consul_publ
 | Key | Used by | Description |
 |-----|---------|-------------|
 | `domain-name` | hosts, mikrotik | Space-separated list of DNS names for the service. `http://` / `https://` prefixes are stripped automatically. |
-| `homepage-path` | homepage | Space-separated placements in the form `<group>/<service-name>`; omit to hide the service from Homepage. |
+| `homepage-path` | homepage | Placement in the form `<group>/<service-name>`; spaces are allowed and surrounding spaces are ignored. Omit to hide the service from Homepage. |
 | `publish-http` | hosts, caddy | Group selector — the service is published only when the local node is a member of the named group. |
 | `publish-homepage` | homepage | Group selector — the service is added only when the local node is a member of one of the named groups. |
 | `publish-path` | caddy | URL path prefix for the service. |
@@ -132,7 +132,7 @@ homepage:
 #   type: grafana
 
 # Consul service metadata:
-# homepage-path: "Monitoring/Grafana Home/Grafana"
+# homepage-path: "Home Automation/Home Assistant"
 # publish-homepage: "home"
 
 mikrotik:

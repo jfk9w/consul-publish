@@ -10,7 +10,7 @@ import (
 // Service metadata keys used by the listeners.
 const (
 	DomainNameKey      = "domain-name"      // space-separated DNS names; http:// / https:// prefixes are stripped
-	HomepagePathKey    = "homepage-path"    // space-separated Homepage placements in the form group/service-name
+	HomepagePathKey    = "homepage-path"    // Homepage placement in the form group/service-name
 	PublishHTTPKey     = "publish-http"     // group selector — service is published only when the local node is a member
 	PublishHomepageKey = "publish-homepage" // group selector — service is added to Homepage only when the local node is a member
 	PublishPathKey     = "publish-path"     // URL path prefix for Caddy reverse-proxy entries
