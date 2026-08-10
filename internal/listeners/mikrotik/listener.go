@@ -34,6 +34,8 @@ func NewListenerWithClient(cfg ListenerConfig, client DNSClient) *Listener {
 	return &Listener{cfg: cfg, client: client}
 }
 
+func (l *Listener) Name() string { return "mikrotik" }
+
 func (l *Listener) KV() []string {
 	return nil
 }

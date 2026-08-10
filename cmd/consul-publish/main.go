@@ -166,6 +166,8 @@ type systemdListener struct {
 	once sync.Once
 }
 
+func (l *systemdListener) Name() string { return "systemd" }
+
 func (l *systemdListener) KV() []string {
 	return nil
 }

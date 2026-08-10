@@ -49,7 +49,7 @@ consul_publish_host_group_info{host_group="home"} 1
 consul_publish_host_group_info{host_group="mariadb"} 1
 ```
 
-The exporter also publishes `consul_publish_consul_state_ready` and `consul_publish_last_update_timestamp_seconds`. It intentionally omits host, country, job, and instance labels; Prometheus adds target labels during scraping.
+The exporter also publishes `consul_publish_consul_state_ready`, `consul_publish_last_update_timestamp_seconds`, `consul_publish_listener_status{listener=...}`, and `consul_publish_listener_last_run_timestamp_seconds{listener=...}`. Listener status is `1` when its last notification completed successfully and `0` when it returned an error; a listener error is logged but does not stop the daemon. It intentionally omits host, country, job, and instance labels; Prometheus adds target labels during scraping.
 
 ## Service metadata keys
 

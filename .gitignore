@@ -4,3 +4,6 @@ __debug_bin*
 bin/
 .idea/
 *.Caddyfile
+.claude/
+.codex/
+.mise.local.toml

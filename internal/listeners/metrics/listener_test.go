@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -59,6 +60,20 @@ func TestListenerReadiness(t *testing.T) {
 	after := scrape(t, l, "/metrics")
 	assert.Contains(t, after, "consul_publish_consul_state_ready 1")
 	assert.NotContains(t, after, "consul_publish_last_update_timestamp_seconds 0")
+}
+
+func TestListenerStatus(t *testing.T) {
+	l := New(Config{Path: "/metrics"})
+	l.ObserveListener("homepage", nil)
+	l.ObserveListener("caddy", errors.New("reload failed"))
+
+	body := scrape(t, l, "/metrics")
+	assert.Contains(t, body, `consul_publish_listener_status{listener="caddy"} 0`)
+	assert.Contains(t, body, `consul_publish_listener_status{listener="homepage"} 1`)
+	assert.Contains(t, body, `consul_publish_listener_last_run_timestamp_seconds{listener="caddy"} `)
+	assert.Contains(t, body, `consul_publish_listener_last_run_timestamp_seconds{listener="homepage"} `)
+	assert.NotContains(t, body, `consul_publish_listener_last_run_timestamp_seconds{listener="caddy"} 0`)
+	assert.NotContains(t, body, `consul_publish_listener_last_run_timestamp_seconds{listener="homepage"} 0`)
 }
 
 func TestHandlerUsesConfiguredPath(t *testing.T) {

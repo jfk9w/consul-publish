@@ -111,31 +111,46 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 				}
 
 				slog.Info("notifying listeners")
-				for _, listener := range listeners {
-					name := reflect.TypeOf(listener).String()
-					log := slog.With("listener", name)
-					log.Debug("notifying listener")
-
-					var state State
-					if err := deepcopy.Copy(&state, w.state); err != nil {
-						log.Error("failed to copy state for listener", "error", err)
-						return err
-					}
-
-					if err := listener.Notify(ctx, &state); err != nil {
-						log.Error("listener notification failed", "error", err)
-						return err
-					}
-
-					log.Debug("listener notified")
-				}
-
-				return nil
+				return notifyListeners(ctx, w.state, listeners)
 			}))
 		}
 	}))
 
 	return w.work.Wait()
+}
+
+func notifyListeners(ctx context.Context, source *State, listeners []Listener) error {
+	observers := make([]ListenerObserver, 0, len(listeners))
+	for _, listener := range listeners {
+		if observer, ok := listener.(ListenerObserver); ok {
+			observers = append(observers, observer)
+		}
+	}
+
+	for _, listener := range listeners {
+		name := listener.Name()
+		log := slog.With("listener", name)
+		log.Debug("notifying listener")
+
+		var state State
+		if err := deepcopy.Copy(&state, source); err != nil {
+			log.Error("failed to copy state for listener", "error", err)
+			return err
+		}
+
+		err := listener.Notify(ctx, &state)
+		for _, observer := range observers {
+			observer.ObserveListener(name, err)
+		}
+		if err != nil {
+			log.Error("listener notification failed", "error", err)
+			continue
+		}
+
+		log.Debug("listener notified")
+	}
+
+	return nil
 }
 
 func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {

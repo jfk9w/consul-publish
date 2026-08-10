@@ -7,6 +7,12 @@ import "context"
 // KV returns the list of KV prefixes the listener needs; Watch subscribes to them.
 // Notify is called after every debounced state change with a fresh deep copy of the state.
 type Listener interface {
+	Name() string
 	KV() []string
 	Notify(ctx context.Context, state *State) error
+}
+
+// ListenerObserver receives the result of every listener notification.
+type ListenerObserver interface {
+	ObserveListener(name string, err error)
 }

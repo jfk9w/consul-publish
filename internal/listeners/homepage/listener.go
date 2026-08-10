@@ -27,12 +27,15 @@ type Config struct {
 }
 
 type Listener struct {
-	cfg Config
+	cfg           Config
+	reloadPending bool
 }
 
 func New(cfg Config) *Listener {
 	return &Listener{cfg: cfg}
 }
+
+func (l *Listener) Name() string { return "homepage" }
 
 func (l *Listener) KV() []string {
 	return []string{l.cfg.KV}
@@ -53,11 +56,15 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 
 	slog.Debug("rendered Homepage configuration", "listener", "homepage", "self", state.Self, "changed", changed)
 	if changed && l.cfg.Exec != "" {
-		slog.Info("Homepage configuration changed, reloading", "listener", "homepage")
+		l.reloadPending = true
+	}
+	if l.reloadPending {
+		slog.Info("reloading Homepage", "listener", "homepage", "configuration_changed", changed)
 		if err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run(); err != nil {
 			slog.Error("failed to reload Homepage", "listener", "homepage", "error", err)
 			return errors.Wrap(err, "reload Homepage")
 		}
+		l.reloadPending = false
 		slog.Info("Homepage reloaded", "listener", "homepage")
 	}
 

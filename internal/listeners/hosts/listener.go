@@ -33,6 +33,8 @@ func New(cfg Config) Listener {
 	}
 }
 
+func (l Listener) Name() string { return "hosts" }
+
 func (l Listener) KV() []string {
 	return nil
 }

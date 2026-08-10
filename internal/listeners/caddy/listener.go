@@ -31,7 +31,8 @@ type Config struct {
 }
 
 type Listener struct {
-	cfg Config
+	cfg           Config
+	reloadPending bool
 }
 
 func New(cfg Config) *Listener {
@@ -39,6 +40,8 @@ func New(cfg Config) *Listener {
 		cfg: cfg,
 	}
 }
+
+func (l *Listener) Name() string { return "caddy" }
 
 func (l *Listener) KV() []string {
 	return []string{
@@ -100,13 +103,18 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 		"node_changed", changedNode,
 	)
 
-	if changedService || changedNode {
-		log.Info("caddy configuration changed, reloading")
+	changed := changedService || changedNode
+	if changed {
+		l.reloadPending = true
+	}
+	if l.reloadPending {
+		log.Info("reloading caddy", "configuration_changed", changed)
 		err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run()
 		if err != nil {
 			log.Error("failed to reload caddy", "error", err)
 			return errors.Wrap(err, "reload caddy")
 		}
+		l.reloadPending = false
 		log.Info("caddy reloaded")
 	}
 
