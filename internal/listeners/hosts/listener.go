@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/url"
 	"strings"
@@ -33,6 +34,8 @@ func New(cfg Config) Listener {
 	}
 }
 
+func (l Listener) Name() string { return "hosts" }
+
 func (l Listener) KV() []string {
 	return nil
 }
@@ -44,7 +47,7 @@ func (l Listener) KV() []string {
 func (l Listener) Notify(ctx context.Context, state *consul.State) error {
 	hosts := buildHosts(state)
 
-	_, err := l.cfg.File.Write(func(file io.Writer) error {
+	changed, err := l.cfg.File.Write(func(file io.Writer) error {
 		for address, names := range hosts.iter() {
 			if _, err := fmt.Fprintln(file, address, strings.Join(names, " ")); err != nil {
 				return errors.Wrap(err, "write to temp file")
@@ -53,6 +56,15 @@ func (l Listener) Notify(ctx context.Context, state *consul.State) error {
 
 		return nil
 	})
+	if err == nil {
+		slog.Debug("rendered hosts file",
+			"component", "listener",
+			"listener", l.Name(),
+			"path", l.cfg.File.Path,
+			"addresses", len(hosts),
+			"changed", changed,
+		)
+	}
 
 	return err
 }

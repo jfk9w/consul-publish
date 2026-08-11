@@ -49,7 +49,7 @@ consul_publish_host_group_info{host_group="home"} 1
 consul_publish_host_group_info{host_group="mariadb"} 1
 ```
 
-The exporter also publishes `consul_publish_consul_state_ready` and `consul_publish_last_update_timestamp_seconds`. It intentionally omits host, country, job, and instance labels; Prometheus adds target labels during scraping.
+The exporter also publishes `consul_publish_consul_state_ready`, `consul_publish_last_update_timestamp_seconds`, `consul_publish_listener_status{listener=...}`, and `consul_publish_listener_last_run_timestamp_seconds{listener=...}`. Listener status is `1` when its last notification completed successfully and `0` when it returned an error; a listener error is logged but does not stop the daemon. It intentionally omits host, country, job, and instance labels; Prometheus adds target labels during scraping.
 
 ## Service metadata keys
 
@@ -79,6 +79,19 @@ consul-publish --dump.values   # print current config values to stdout
 ```
 
 ## Configuration
+
+### Logging
+
+Service logs are written to stderr as structured key-value records. The default
+level is `info`; use JSON in log collectors and enable source locations only when
+troubleshooting:
+
+```yaml
+log:
+  level: info       # debug, info, warn, error
+  format: json      # text, json
+  source: false
+```
 
 A minimal configuration requires only a Consul token:
 

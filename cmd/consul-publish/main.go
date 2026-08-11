@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
+	"slices"
 	"sync"
 	"syscall"
 
@@ -29,8 +30,9 @@ type Config struct {
 		Values bool `yaml:"values,omitempty" doc:"Dump configuration values in JSON"`
 	} `yaml:"dump,omitempty" doc:"Dump configuration info"`
 
-	Address string `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
-	Token   string `yaml:"token" doc:"Consul token"`
+	Address string    `yaml:"address,omitempty" doc:"Consul address" default:"127.0.0.1:8500"`
+	Token   string    `yaml:"token" doc:"Consul token"`
+	Log     LogConfig `yaml:"log,omitempty" doc:"Logging settings"`
 
 	Hosts struct {
 		Enabled      bool `yaml:"enabled,omitempty" doc:"Enable hosts target"`
@@ -58,6 +60,12 @@ type Config struct {
 	} `yaml:"metrics,omitempty" doc:"Prometheus metrics exporter settings"`
 }
 
+type LogConfig struct {
+	Level  string `yaml:"level,omitempty"  default:"info" doc:"Minimum log level (debug, info, warn, or error)"`
+	Format string `yaml:"format,omitempty" default:"text" doc:"Log output format (text or json)"`
+	Source bool   `yaml:"source,omitempty"                doc:"Include source file and line in log records"`
+}
+
 func newConsulClient(address, token string) (*capi.Client, error) {
 	cfg := capi.DefaultConfig()
 	cfg.Address = address
@@ -65,28 +73,24 @@ func newConsulClient(address, token string) (*capi.Client, error) {
 	return capi.NewClient(cfg)
 }
 
-func newLogger() *slog.Logger {
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		AddSource: true,
-		Level:     slog.LevelDebug,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == "source" {
-				if source, ok := a.Value.Any().(*slog.Source); ok {
-					fn := source.Function
-					slash := strings.LastIndex(fn, "/")
-					if slash > 0 {
-						fn = fn[slash+1:]
-					}
+func newLogger(cfg LogConfig) (*slog.Logger, error) {
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cfg.Level)); err != nil {
+		return nil, fmt.Errorf("invalid log level %q: %w", cfg.Level, err)
+	}
 
-					return slog.String("caller", fn)
-				}
-			}
+	options := &slog.HandlerOptions{AddSource: cfg.Source, Level: level}
+	var handler slog.Handler
+	switch cfg.Format {
+	case "text":
+		handler = slog.NewTextHandler(os.Stderr, options)
+	case "json":
+		handler = slog.NewJSONHandler(os.Stderr, options)
+	default:
+		return nil, fmt.Errorf("invalid log format %q: expected text or json", cfg.Format)
+	}
 
-			return a
-		},
-	})
-
-	return slog.New(handler)
+	return slog.New(handler).With("service", "consul-publish"), nil
 }
 
 var exit = []os.Signal{
@@ -98,30 +102,39 @@ var exit = []os.Signal{
 }
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("service stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), exit...)
 	defer cancel()
 
 	cfg, schema, err := confi.Get[Config](ctx, "consul-publish")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load configuration: %w", err)
 	}
 
 	switch {
 	case pointer.Get(cfg.Dump).Schema:
-		dump(schema, confi.JSON)
-		return
+		return dump(schema, confi.JSON)
 	case pointer.Get(cfg.Dump).Values:
 		cfg.Dump = nil
-		dump(cfg, confi.JSON)
-		return
+		return dump(cfg, confi.JSON)
 	}
+
+	logger, err := newLogger(cfg.Log)
+	if err != nil {
+		return err
+	}
+	slog.SetDefault(logger)
 
 	client, err := newConsulClient(cfg.Address, cfg.Token)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("create Consul client: %w", err)
 	}
-
-	slog.SetDefault(newLogger())
 
 	var listeners []consul.Listener
 
@@ -148,6 +161,12 @@ func main() {
 	}
 
 	listeners = append(listeners, new(systemdListener))
+	listenerNames := make([]string, 0, len(listeners))
+	for _, listener := range listeners {
+		listenerNames = append(listenerNames, listener.Name())
+	}
+	slices.Sort(listenerNames)
+	slog.Info("service starting", "consul_address", cfg.Address, "listeners", listenerNames)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return consul.Watch(ctx, client, listeners...) })
@@ -156,33 +175,40 @@ func main() {
 	}
 
 	if err := eg.Wait(); err != nil {
-		panic(err)
+		return err
 	}
 
-	slog.Info("shutdown")
+	slog.Info("service stopped")
+	return nil
 }
 
 type systemdListener struct {
 	once sync.Once
 }
 
+func (l *systemdListener) Name() string { return "systemd" }
+
 func (l *systemdListener) KV() []string {
 	return nil
 }
 
 func (l *systemdListener) Notify(ctx context.Context, state *consul.State) error {
-	l.once.Do(func() { notify(daemon.SdNotifyReady) })
+	l.once.Do(func() {
+		slog.Info("service ready", "consul_node", state.Self)
+		notify(daemon.SdNotifyReady)
+	})
 	return nil
 }
 
 func notify(state string) {
 	if _, err := daemon.SdNotify(false, state); err != nil {
-		slog.Warn("failed to notify systemd", "error", err)
+		slog.Warn("failed to notify systemd", "component", "systemd", "error", err)
 	}
 }
 
-func dump(value any, codec confi.Codec) {
+func dump(value any, codec confi.Codec) error {
 	if err := codec.Marshal(value, os.Stdout); err != nil {
-		panic(err)
+		return fmt.Errorf("encode output: %w", err)
 	}
+	return nil
 }

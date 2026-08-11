@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/jfk9w/consul-publish/internal/consul"
 	"github.com/jfk9w/consul-publish/internal/listeners"
 	"gopkg.in/yaml.v3"
@@ -66,6 +68,42 @@ func TestNotifyReloadsOnlyAfterChange(t *testing.T) {
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("reload command ran for unchanged configuration: stat error = %v", err)
 	}
+}
+
+func TestNotifyRetriesFailedReloadWithoutFileChange(t *testing.T) {
+	t.Parallel()
+
+	currentUser, err := user.Current()
+	require.NoError(t, err)
+	currentGroup, err := user.LookupGroupId(currentUser.Gid)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	allow := filepath.Join(dir, "allow-reload")
+	listener := New(Config{
+		KV:   "homepage",
+		Exec: fmt.Sprintf("test -f %q", allow),
+		Services: listeners.File{
+			Path:  filepath.Join(dir, "services.yaml"),
+			Mode:  0o644,
+			User:  currentUser.Username,
+			Group: currentGroup.Name,
+		},
+	})
+	state := &consul.State{
+		Nodes: map[string]consul.Node{
+			"node": {Name: "node", Services: []consul.Service{{ID: "app", Meta: map[string]string{
+				listeners.HomepagePathKey:    "Apps/App",
+				listeners.PublishHomepageKey: "all",
+			}}}},
+		},
+		Self: "node",
+		KV:   consul.Folder{"homepage": consul.Folder{"app": consul.Value("href: /")}},
+	}
+
+	require.ErrorContains(t, listener.Notify(t.Context(), state), "reload Homepage")
+	require.NoError(t, os.WriteFile(allow, nil, 0o644))
+	require.NoError(t, listener.Notify(t.Context(), state))
 }
 
 func TestWrite(t *testing.T) {

@@ -3,6 +3,7 @@ package consul
 import (
 	"context"
 	"errors"
+	"fmt"
 	"iter"
 	"log/slog"
 	"reflect"
@@ -29,7 +30,7 @@ type watcher struct {
 func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) error {
 	self, err := client.Agent().NodeName()
 	if err != nil {
-		return err
+		return fmt.Errorf("get local Consul node name: %w", err)
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -69,7 +70,8 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 			break
 		}
 
-		slog.Info("watcher init complete")
+		log := slog.With("component", "consul")
+		log.Info("watchers initialized", "consul_node", self, "kv_prefixes", len(keys))
 
 		var (
 			prev   *State
@@ -106,36 +108,56 @@ func Watch(ctx context.Context, client *capi.Client, listeners ...Listener) erro
 				mu.Lock()
 				defer mu.Unlock()
 				if tts != ts {
-					slog.Debug("skipping notification")
+					log.Debug("notification superseded by a newer change")
 					return nil
 				}
 
-				slog.Info("notifying listeners")
-				for _, listener := range listeners {
-					name := reflect.TypeOf(listener).String()
-					log := slog.With("listener", name)
-					log.Debug("notifying listener")
-
-					var state State
-					if err := deepcopy.Copy(&state, w.state); err != nil {
-						log.Error("failed to copy state for listener", "error", err)
-						return err
-					}
-
-					if err := listener.Notify(ctx, &state); err != nil {
-						log.Error("listener notification failed", "error", err)
-						return err
-					}
-
-					log.Debug("listener notified")
-				}
-
-				return nil
+				nodes, services, kv := stateCounts(w.state)
+				log.Info("catalog state changed",
+					"nodes", nodes,
+					"services", services,
+					"kv_entries", kv,
+					"listeners", len(listeners),
+				)
+				return notifyListeners(ctx, w.state, listeners)
 			}))
 		}
 	}))
 
 	return w.work.Wait()
+}
+
+func notifyListeners(ctx context.Context, source *State, listeners []Listener) error {
+	observers := make([]ListenerObserver, 0, len(listeners))
+	for _, listener := range listeners {
+		if observer, ok := listener.(ListenerObserver); ok {
+			observers = append(observers, observer)
+		}
+	}
+
+	for _, listener := range listeners {
+		name := listener.Name()
+		log := slog.With("component", "listener", "listener", name)
+		started := time.Now()
+
+		var state State
+		if err := deepcopy.Copy(&state, source); err != nil {
+			return fmt.Errorf("copy state for listener %q: %w", name, err)
+		}
+
+		err := listener.Notify(ctx, &state)
+		for _, observer := range observers {
+			observer.ObserveListener(name, err)
+		}
+		if err != nil {
+			log.Error("listener failed", "duration", time.Since(started), "error", err)
+			continue
+		}
+
+		log.Debug("listener completed", "duration", time.Since(started))
+	}
+
+	return nil
 }
 
 func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
@@ -146,13 +168,11 @@ func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
 
 	w.init.Add(1)
 	w.work.Go(cancellable(ctx, func() (err error) {
-		log := slog.Default()
-		log.Info("watcher started")
+		log := slog.With("component", "consul", "watcher", "nodes")
+		log.Debug("watcher started")
 		defer func() {
 			if isCanceled(ctx, err) {
-				log.Info("watcher stopped")
-			} else {
-				log.Warn("watcher error", "error", err)
+				log.Debug("watcher stopped")
 			}
 
 			once.Do(w.init.Done)
@@ -160,8 +180,9 @@ func (w *watcher) watchNodes(ctx context.Context, client *capi.Client) {
 
 		for nodes, err := range watch(ctx, client, nodes()) {
 			if err != nil {
-				return err
+				return fmt.Errorf("watch Consul nodes: %w", err)
 			}
+			log.Debug("catalog nodes received", "nodes", len(nodes))
 
 			actual := make(map[string]bool)
 			for _, node := range nodes {
@@ -216,13 +237,11 @@ func (w *watcher) watchServices(ctx context.Context, client *capi.Client, node s
 	}
 
 	w.work.Go(cancellable(ctx, func() (err error) {
-		log := slog.With("node", node)
-		log.Info("watcher started")
+		log := slog.With("component", "consul", "watcher", "services", "node", node)
+		log.Debug("watcher started")
 		defer func() {
 			if isCanceled(ctx, err) {
-				log.Info("watcher stopped")
-			} else {
-				log.Warn("watcher error", "error", err)
+				log.Debug("watcher stopped")
 			}
 
 			cancel()
@@ -233,16 +252,15 @@ func (w *watcher) watchServices(ctx context.Context, client *capi.Client, node s
 
 		for services, err := range watch(ctx, client, services(node)) {
 			if err != nil {
-				return err
+				return fmt.Errorf("watch services on Consul node %q: %w", node, err)
 			}
+			log.Debug("node services received", "services", len(services.Services))
 
 			select {
 			case w.change <- (*serviceChange)(services):
 				if init != nil {
 					init.Done()
 					init = nil
-				} else {
-					log.Debug("watcher update")
 				}
 
 			case <-ctx.Done():
@@ -258,13 +276,11 @@ func (w *watcher) watchKeys(ctx context.Context, client *capi.Client, prefix str
 	var once sync.Once
 	w.init.Add(1)
 	w.work.Go(cancellable(ctx, func() (err error) {
-		log := slog.With("prefix", prefix)
-		log.Info("watcher started")
+		log := slog.With("component", "consul", "watcher", "kv", "prefix", prefix)
+		log.Debug("watcher started")
 		defer func() {
 			if isCanceled(ctx, err) {
-				log.Info("watcher stopped")
-			} else {
-				log.Warn("watcher error", "error", err)
+				log.Debug("watcher stopped")
 			}
 
 			once.Do(w.init.Done)
@@ -272,15 +288,15 @@ func (w *watcher) watchKeys(ctx context.Context, client *capi.Client, prefix str
 
 		for keys, err := range watch(ctx, client, keys(prefix)) {
 			if err != nil {
-				return err
+				return fmt.Errorf("watch Consul KV prefix %q: %w", prefix, err)
 			}
+			log.Debug("KV entries received", "entries", len(keys))
 
 			select {
 			case w.change <- kvChange{
 				prefix: prefix,
 				kv:     keys,
 			}:
-				log.Debug("watcher update")
 				once.Do(w.init.Done)
 			case <-ctx.Done():
 				return ctx.Err()
@@ -289,6 +305,26 @@ func (w *watcher) watchKeys(ctx context.Context, client *capi.Client, prefix str
 
 		return
 	}))
+}
+
+func stateCounts(state *State) (nodes, services, kv int) {
+	nodes = len(state.Nodes)
+	for _, node := range state.Nodes {
+		services += len(node.Services)
+	}
+	var countKV func(Folder)
+	countKV = func(folder Folder) {
+		for _, entry := range folder {
+			switch entry := entry.(type) {
+			case Folder:
+				countKV(entry)
+			case Value:
+				kv++
+			}
+		}
+	}
+	countKV(state.KV)
+	return nodes, services, kv
 }
 
 func nodes() WatchFunc[[]*capi.Node] {

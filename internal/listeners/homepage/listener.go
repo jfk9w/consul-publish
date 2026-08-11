@@ -27,18 +27,22 @@ type Config struct {
 }
 
 type Listener struct {
-	cfg Config
+	cfg           Config
+	reloadPending bool
 }
 
 func New(cfg Config) *Listener {
 	return &Listener{cfg: cfg}
 }
 
+func (l *Listener) Name() string { return "homepage" }
+
 func (l *Listener) KV() []string {
 	return []string{l.cfg.KV}
 }
 
 func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
+	log := slog.With("component", "listener", "listener", l.Name(), "self", state.Self)
 	definitions, ok := state.KV.Get(l.cfg.KV).(consul.Folder)
 	if !ok {
 		return errors.Errorf("%s is not a folder", l.cfg.KV)
@@ -51,14 +55,18 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 		return errors.Wrap(err, "write Homepage services configuration")
 	}
 
-	slog.Debug("rendered Homepage configuration", "listener", "homepage", "self", state.Self, "changed", changed)
+	log.Debug("rendered homepage configuration", "changed", changed)
 	if changed && l.cfg.Exec != "" {
-		slog.Info("Homepage configuration changed, reloading", "listener", "homepage")
+		l.reloadPending = true
+	}
+	if l.reloadPending {
+		log.Info("reloading homepage", "configuration_changed", changed)
 		if err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run(); err != nil {
-			slog.Error("failed to reload Homepage", "listener", "homepage", "error", err)
+			log.Error("failed to reload homepage", "error", err)
 			return errors.Wrap(err, "reload Homepage")
 		}
-		slog.Info("Homepage reloaded", "listener", "homepage")
+		l.reloadPending = false
+		log.Info("homepage reloaded")
 	}
 
 	return nil
