@@ -29,6 +29,28 @@ func TestNotifyListenersContinuesAfterListenerError(t *testing.T) {
 	}, observer.statuses)
 }
 
+func TestStateCounts(t *testing.T) {
+	state := &State{
+		Nodes: map[string]Node{
+			"node-1": {Services: []Service{{}, {}}},
+			"node-2": {Services: []Service{{}}},
+		},
+		KV: Folder{
+			"root": Folder{
+				"one": Value("1"),
+				"nested": Folder{
+					"two": Value("2"),
+				},
+			},
+		},
+	}
+
+	nodes, services, kv := stateCounts(state)
+	require.Equal(t, 2, nodes)
+	require.Equal(t, 3, services)
+	require.Equal(t, 2, kv)
+}
+
 type testListener struct {
 	name  string
 	err   error

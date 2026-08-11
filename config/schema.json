@@ -175,6 +175,27 @@
       ],
       "type": "object"
     },
+    "log": {
+      "additionalProperties": false,
+      "description": "Logging settings",
+      "properties": {
+        "format": {
+          "default": "text",
+          "description": "Log output format (text or json)",
+          "type": "string"
+        },
+        "level": {
+          "default": "info",
+          "description": "Minimum log level (debug, info, warn, or error)",
+          "type": "string"
+        },
+        "source": {
+          "description": "Include source file and line in log records",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "metrics": {
       "additionalProperties": false,
       "description": "Prometheus metrics exporter settings",

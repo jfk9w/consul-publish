@@ -42,6 +42,7 @@ func (l *Listener) KV() []string {
 }
 
 func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
+	log := slog.With("component", "listener", "listener", l.Name(), "self", state.Self)
 	definitions, ok := state.KV.Get(l.cfg.KV).(consul.Folder)
 	if !ok {
 		return errors.Errorf("%s is not a folder", l.cfg.KV)
@@ -54,18 +55,18 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 		return errors.Wrap(err, "write Homepage services configuration")
 	}
 
-	slog.Debug("rendered Homepage configuration", "listener", "homepage", "self", state.Self, "changed", changed)
+	log.Debug("rendered homepage configuration", "changed", changed)
 	if changed && l.cfg.Exec != "" {
 		l.reloadPending = true
 	}
 	if l.reloadPending {
-		slog.Info("reloading Homepage", "listener", "homepage", "configuration_changed", changed)
+		log.Info("reloading homepage", "configuration_changed", changed)
 		if err := exec.CommandContext(ctx, "sh", "-c", l.cfg.Exec).Run(); err != nil {
-			slog.Error("failed to reload Homepage", "listener", "homepage", "error", err)
+			log.Error("failed to reload homepage", "error", err)
 			return errors.Wrap(err, "reload Homepage")
 		}
 		l.reloadPending = false
-		slog.Info("Homepage reloaded", "listener", "homepage")
+		log.Info("homepage reloaded")
 	}
 
 	return nil

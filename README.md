@@ -80,6 +80,19 @@ consul-publish --dump.values   # print current config values to stdout
 
 ## Configuration
 
+### Logging
+
+Service logs are written to stderr as structured key-value records. The default
+level is `info`; use JSON in log collectors and enable source locations only when
+troubleshooting:
+
+```yaml
+log:
+  level: info       # debug, info, warn, error
+  format: json      # text, json
+  source: false
+```
+
 A minimal configuration requires only a Consul token:
 
 ```yaml

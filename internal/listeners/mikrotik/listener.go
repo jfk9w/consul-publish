@@ -45,6 +45,7 @@ func (l *Listener) KV() []string {
 // to the current node's IP is created or updated. Records with the configured
 // comment that are no longer present in Consul are deleted.
 func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
+	log := slog.With("component", "listener", "listener", l.Name())
 	selfNode := state.Nodes[state.Self]
 
 	desired := make(map[string]string)
@@ -58,6 +59,11 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 	if err != nil {
 		return errors.Wrap(err, "fetch existing DNS records")
 	}
+	existingRecords := 0
+	for _, records := range existing {
+		existingRecords += len(records)
+	}
+	log.Debug("reconciling DNS records", "desired", len(desired), "existing", existingRecords)
 
 	for domain, address := range desired {
 		if err := l.reconcileDomain(domain, address, existing[domain]); err != nil {
@@ -70,7 +76,7 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) error {
 			continue
 		}
 		for _, r := range records {
-			slog.Info("deleting DNS record", "domain", domain, "id", r.ID)
+			log.Info("deleting DNS record", "domain", domain, "id", r.ID)
 			if err := l.client.DeleteDNSRecord(r.ID); err != nil {
 				return errors.Wrapf(err, "delete DNS record %s (id=%s)", domain, r.ID)
 			}
@@ -96,6 +102,7 @@ func (l *Listener) fetchExisting() (map[string][]mtkapi.DNSRecord, error) {
 // desired state: exactly one record pointing to address. If multiple records exist,
 // duplicates are deleted; if the address is wrong, the record is updated in-place.
 func (l *Listener) reconcileDomain(domain, address string, existing []mtkapi.DNSRecord) error {
+	log := slog.With("component", "listener", "listener", l.Name())
 	matchIdx := -1
 	for i, r := range existing {
 		if r.Address == address {
@@ -112,7 +119,7 @@ func (l *Listener) reconcileDomain(domain, address string, existing []mtkapi.DNS
 		if i == keepIdx {
 			continue
 		}
-		slog.Info("deleting duplicate DNS record", "domain", domain, "id", r.ID)
+		log.Info("deleting duplicate DNS record", "domain", domain, "id", r.ID)
 		if err := l.client.DeleteDNSRecord(r.ID); err != nil {
 			return errors.Wrapf(err, "delete duplicate record id=%s", r.ID)
 		}
@@ -120,7 +127,7 @@ func (l *Listener) reconcileDomain(domain, address string, existing []mtkapi.DNS
 
 	switch {
 	case len(existing) == 0:
-		slog.Info("creating DNS record", "domain", domain, "address", address)
+		log.Info("creating DNS record", "domain", domain, "address", address)
 		_, err := l.client.CreateDNSRecord(mtkapi.DNSRecord{
 			Name:    domain,
 			Address: address,
@@ -131,7 +138,7 @@ func (l *Listener) reconcileDomain(domain, address string, existing []mtkapi.DNS
 
 	case matchIdx < 0:
 		kept := existing[keepIdx]
-		slog.Info("updating DNS record", "domain", domain, "id", kept.ID, "old", kept.Address, "new", address)
+		log.Info("updating DNS record", "domain", domain, "id", kept.ID, "old_address", kept.Address, "new_address", address)
 		_, err := l.client.UpdateDNSRecord(mtkapi.DNSRecord{
 			ID:      kept.ID,
 			Name:    domain,

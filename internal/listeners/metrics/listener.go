@@ -188,7 +188,7 @@ func (l *Listener) ListenAndServe(ctx context.Context) error {
 
 // Serve runs the metrics server on listener and shuts it down gracefully with ctx.
 func (l *Listener) Serve(ctx context.Context, listener net.Listener) error {
-	log := slog.With("listener", "metrics", "address", listener.Addr().String(), "path", l.cfg.Path)
+	log := slog.With("component", "listener", "listener", l.Name(), "address", listener.Addr().String(), "path", l.cfg.Path)
 	log.Info("metrics server started")
 
 	server := &http.Server{Handler: l.Handler()}
@@ -208,9 +208,6 @@ func (l *Listener) Serve(ctx context.Context, listener net.Listener) error {
 	if errors.Is(err, http.ErrServerClosed) && ctx.Err() != nil {
 		log.Info("metrics server stopped")
 		return nil
-	}
-	if err != nil {
-		log.Error("metrics server failed", "error", err)
 	}
 	return err
 }

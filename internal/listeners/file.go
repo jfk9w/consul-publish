@@ -60,7 +60,7 @@ func (f File) Write(writeFn func(file io.Writer) error) (bool, error) {
 		return false, errors.Wrap(err, "check if same file")
 	}
 
-	log := slog.With("path", f.Path)
+	log := slog.With("component", "file", "path", f.Path)
 
 	if same {
 		log.Debug("file unchanged")

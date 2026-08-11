@@ -55,7 +55,7 @@ func (l *Listener) Notify(ctx context.Context, state *consul.State) (err error) 
 		return errors.Errorf("%s is not a folder", l.cfg.KV)
 	}
 
-	log := slog.With("listener", "caddy", "self", state.Self)
+	log := slog.With("component", "listener", "listener", l.Name(), "self", state.Self)
 	self := state.Nodes[state.Self]
 	services := make(map[string][]Instance)
 	instanceCount := 0
