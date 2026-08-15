@@ -76,10 +76,29 @@ func TestBuildHostsAddsOnlyAliasesUniqueToOneNode(t *testing.T) {
 		},
 	}
 
+	actual, err := buildHosts(state, map[string][]string{
+		"10.0.0.10": {"host.containers.internal", " registry.local "},
+	})
+	require.NoError(t, err)
 	require.Equal(t, []hostEntry{
+		{address: "10.0.0.1", names: []string{"mars", "loki-alt.example.com", "loki.example.com", "mars.sonc.top", "shared.example.com"}},
+		{address: "10.0.0.10", names: []string{"host.containers.internal", "registry.local"}},
 		{address: "10.0.0.2", names: []string{"venus", "traces.example.com", "venus.sonc.top"}},
-		{address: "127.0.0.1", names: []string{"mars", "loki-alt.example.com", "loki.example.com", "mars.sonc.top", "shared.example.com"}},
-	}, collectHosts(buildHosts(state)))
+		{address: "127.0.0.1", names: []string{"localhost"}},
+		{address: "::1", names: []string{"localhost"}},
+	}, collectHosts(actual))
+}
+
+func TestBuildHostsRejectsInvalidStaticEntry(t *testing.T) {
+	state := &consul.State{Self: "self", Nodes: map[string]consul.Node{
+		"self": {ID: "self", Name: "self", Address: "10.0.0.1"},
+	}}
+
+	_, err := buildHosts(state, map[string][]string{"not-an-ip": {"alias"}})
+	require.ErrorContains(t, err, `invalid hosts entry address "not-an-ip"`)
+
+	_, err = buildHosts(state, map[string][]string{"10.0.0.1": {"two names"}})
+	require.ErrorContains(t, err, `invalid hosts entry name "two names"`)
 }
 
 type hostEntry struct {

@@ -19,7 +19,8 @@ import (
 
 // Config holds the file output settings for the hosts listener.
 type Config struct {
-	File File `yaml:",inline"`
+	File    File                `yaml:",inline"`
+	Entries map[string][]string `yaml:"entries,omitempty" doc:"Additional static hosts entries keyed by IP address"`
 }
 
 // Listener writes /etc/hosts (or a custom path) based on the Consul node and service inventory.
@@ -41,11 +42,14 @@ func (l Listener) KV() []string {
 }
 
 // Notify regenerates the hosts file from the current Consul state.
-// Each node is mapped to its IP address; the local node is mapped to 127.0.0.1.
+// Each node, including the local node, is mapped to its Consul IP address.
 // Domain names are added as aliases when they occur on exactly one node. The local
 // node gets all of its published domain names regardless of uniqueness.
 func (l Listener) Notify(ctx context.Context, state *consul.State) error {
-	hosts := buildHosts(state)
+	hosts, err := buildHosts(state, l.cfg.Entries)
+	if err != nil {
+		return err
+	}
 
 	changed, err := l.cfg.File.Write(func(file io.Writer) error {
 		for address, names := range hosts.iter() {
@@ -69,24 +73,35 @@ func (l Listener) Notify(ctx context.Context, state *consul.State) error {
 	return err
 }
 
-func buildHosts(state *consul.State) hosts {
+func buildHosts(state *consul.State, entries map[string][]string) (hosts, error) {
 	self := state.Nodes[state.Self]
 	hosts := make(hosts)
+	hosts.add(LocalIP, "localhost")
+	hosts.add("::1", "localhost")
+	for address, names := range entries {
+		if net.ParseIP(address) == nil {
+			return nil, errors.Errorf("invalid hosts entry address %q: expected IP address", address)
+		}
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name == "" || len(strings.Fields(name)) != 1 {
+				return nil, errors.Errorf("invalid hosts entry name %q for address %s", name, address)
+			}
+			hosts.add(address, name)
+		}
+	}
+
 	aliases := uniqueAliases(state)
 	aliases[self.ID] = nodeAliases(state, self)
 	for _, node := range state.Nodes {
 		address := node.Address
-		if self.ID == node.ID {
-			address = LocalIP
-		}
-
 		hosts.addCanonical(address, node.Name)
 		for alias := range aliases[node.ID] {
 			hosts.add(address, alias)
 		}
 	}
 
-	return hosts
+	return hosts, nil
 }
 
 func nodeAliases(state *consul.State, node consul.Node) lib.Set[string] {

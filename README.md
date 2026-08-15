@@ -14,11 +14,12 @@ A Go daemon that watches HashiCorp Consul for service and node changes, synchron
 
 Writes `/etc/hosts` (or a custom path) based on the current Consul node and service inventory:
 
-- Each node is mapped to its IP address.
-- The local node is mapped to `127.0.0.1`.
+- Each node, including the local node, is mapped to its Consul IP address so the generated file also works inside containers.
+- `127.0.0.1 localhost` and `::1 localhost` are always included.
+- Additional static IP-to-name mappings can be configured through `entries`.
 - Unique `domain-name` values from node metadata are added as aliases of their nodes.
 - Service `domain-name` values are added as aliases when each domain occurs on exactly one node; remote aliases do not depend on whether the local node matches `publish-http`.
-- For the local node, all published domain names are added to `127.0.0.1` regardless of uniqueness.
+- For the local node, all published domain names are added to its Consul IP address regardless of uniqueness.
 - IP addresses in `domain-name` are not written as aliases; ports are stripped from domain aliases.
 
 ### Caddy
@@ -111,6 +112,9 @@ hosts:
   mode: 0644
   user: root
   group: root
+  entries:
+    10.0.0.1:
+      - host.containers.internal
 
 caddy:
   enabled: true

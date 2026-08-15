@@ -154,6 +154,16 @@
           "description": "Enable hosts target",
           "type": "boolean"
         },
+        "entries": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Additional static hosts entries keyed by IP address",
+          "type": "object"
+        },
         "group": {
           "type": "string"
         },
