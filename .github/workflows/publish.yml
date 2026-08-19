@@ -1,0 +1,84 @@
+name: Build and publish
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or commit to build
+        required: true
+        default: master
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Select release channel
+        id: release
+        env:
+          SOURCE_REF: ${{ inputs.ref || github.ref_name }}
+        run: |
+          test -n "$SOURCE_REF"
+          printf 'channel=%s\n' "$SOURCE_REF" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$SOURCE_REF" >> "$GITHUB_OUTPUT"
+          printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build Linux AMD64 binary
+        env:
+          CGO_ENABLED: '0'
+          GOARCH: amd64
+          GOOS: linux
+        run: |
+          go build -trimpath -ldflags '-s -w' \
+            -o consul-publish ./cmd/consul-publish
+          python -m zipfile -c consul-publish-linux-amd64.zip consul-publish LICENSE
+          sha256sum consul-publish-linux-amd64.zip > consul-publish-linux-amd64.zip.sha256
+
+      - name: Publish branch release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ steps.release.outputs.channel }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "Branch build: ${RELEASE_CHANNEL}" \
+              --notes "Current build of ${RELEASE_CHANNEL} at ${RELEASE_SHA}." \
+              --prerelease
+            gh release upload "$RELEASE_TAG" --clobber \
+              consul-publish-linux-amd64.zip \
+              consul-publish-linux-amd64.zip.sha256
+          else
+            gh release create "$RELEASE_TAG" \
+              --target "$RELEASE_SHA" \
+              --title "Branch build: ${RELEASE_CHANNEL}" \
+              --notes "Current build of ${RELEASE_CHANNEL} at ${RELEASE_SHA}." \
+              --prerelease \
+              consul-publish-linux-amd64.zip \
+              consul-publish-linux-amd64.zip.sha256
+          fi

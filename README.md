@@ -70,6 +70,15 @@ mise run build      # build → bin/consul-publish
 mise run test       # run tests
 ```
 
+Every push is also tested and built by GitHub Actions. Successful builds are
+published as prereleases with stable per-branch URLs. The release tag is the
+source ref verbatim: `master` uses `master`, and `feature/new-listener` uses
+`feature/new-listener`.
+
+The workflow can also be started manually with a branch, tag, or commit in its
+`ref` input. Each release contains a Linux AMD64 ZIP archive with the binary and
+license, plus its SHA-256 checksum.
+
 ## Usage
 
 ```bash
